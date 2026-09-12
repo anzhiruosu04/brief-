@@ -67,7 +67,7 @@ export function BriefEditor({ briefId }: { briefId: string }) {
   // 模块内容（受控本地态，编辑即时写回 store）
   const modules = brief?.modules ?? [];
   const modulePayload = useMemo(
-    () => modules.map((m) => ({ id: m.id, content: m.content })),
+    () => modules.map((m) => ({ id: m.id, key: m.key, content: m.content })),
     [modules],
   );
   const { byModule, result } = useModuleScan(modulePayload, activeLibrary);

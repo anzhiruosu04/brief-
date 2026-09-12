@@ -14,9 +14,48 @@ interface CompiledWord {
  * 策略：所有词条合并为一个正则（长词优先，保证“最先进”先于“最”命中），
  * 单次遍历文本；命中区间相互重叠时保留先匹配到的长词，避免重复计数。
  */
+/** 扫描选项：ignoreQuoted 时跳过被引号包裹区间内的命中（用于"引用禁用词清单"等场景） */
+export interface ScanOptions {
+  ignoreQuoted?: boolean;
+}
+
+/**
+ * 计算文本中被引号包裹的区间。
+ * 支持中文双引号 “…”、直角引号 「…」『…』、英文双引号 "…"（按相邻成对处理）。
+ */
+function quotedRanges(text: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  const pairs: Array<[string, string]> = [
+    ['“', '”'],
+    ['「', '」'],
+    ['『', '』'],
+  ];
+  for (const [open, close] of pairs) {
+    let from = 0;
+    let s = text.indexOf(open, from);
+    while (s !== -1) {
+      const e = text.indexOf(close, s + 1);
+      if (e === -1) break;
+      ranges.push([s, e + 1]);
+      from = e + 1;
+      s = text.indexOf(open, from);
+    }
+  }
+  // 英文双引号按相邻成对
+  let q = text.indexOf('"');
+  while (q !== -1) {
+    const e = text.indexOf('"', q + 1);
+    if (e === -1) break;
+    ranges.push([q, e + 1]);
+    q = text.indexOf('"', e + 1);
+  }
+  return ranges;
+}
+
 export function scanText(
   text: string,
   library: ForbiddenWord[],
+  options: ScanOptions = {},
 ): ScanResult {
   const empty: ScanResult = {
     hits: [],
@@ -26,6 +65,19 @@ export function scanText(
     total: 0,
   };
   if (!text || library.length === 0) return empty;
+
+  const ignoreRanges = options.ignoreQuoted ? quotedRanges(text) : [];
+  const inQuoted = (start: number, end: number): boolean =>
+    ignoreRanges.some(([s, e]) => start >= s && end <= e);
+
+  // 否定/警示语境：命中词前 12 个字符窗口内出现引导词时，视为"反面引用"豁免。
+  // 仅在 ignoreQuoted（合规备注模块）时生效，正文模块与独立合规页不受影响。
+  const NEGATION_RE = /(不[得会能要可]|禁止|严禁|切勿|请勿|避免|勿|杜绝|禁用)/;
+  const isNegatedCitation = (start: number): boolean => {
+    if (!options.ignoreQuoted) return false;
+    const before = text.slice(Math.max(0, start - 12), start);
+    return NEGATION_RE.test(before);
+  };
 
   const compiled: CompiledWord[] = library
     .filter((w) => w.word.trim().length > 0)
@@ -56,6 +108,8 @@ export function scanText(
       continue;
     }
     if (overlaps(start, end)) continue;
+    // 合规备注等场景：被引号包裹或处于否定警示语境的禁用词属于"反面示例引用"，不计入风险
+    if (inQuoted(start, end) || isNegatedCitation(start)) continue;
     const found = compiled.find((c) => c.lower === match![0]);
     if (!found) continue;
     occupied.push([start, end]);

@@ -9,9 +9,11 @@ export function useScan(text: string, library: ForbiddenWord[]): ScanResult {
   return useMemo(() => scanText(text, library), [text, library]);
 }
 
-/** 多模块聚合扫描（按模块 id 分组命中） */
+/** 多模块聚合扫描（按模块 id 分组命中）。
+ *  合规备注(notes)模块中被引号包裹的禁用词属于"反面示例引用"，开启 ignoreQuoted 豁免，
+ *  其余模块仍严格全量扫描。 */
 export function useModuleScan(
-  modules: Array<{ id: string; content: string }>,
+  modules: Array<{ id: string; key?: string; content: string }>,
   library: ForbiddenWord[],
 ): {
   byModule: Map<string, ScanResult>;
@@ -22,7 +24,9 @@ export function useModuleScan(
     const byModule = new Map<string, ScanResult>();
     const all: ScanHit[] = [];
     modules.forEach((m) => {
-      const result = scanText(m.content, library);
+      const result = scanText(m.content, library, {
+        ignoreQuoted: m.key === 'notes',
+      });
       byModule.set(m.id, result);
       result.hits.forEach((h) => all.push({ ...h, moduleId: m.id }));
     });
