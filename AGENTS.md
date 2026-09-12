@@ -1,65 +1,87 @@
-# 项目上下文
+# Brief 智能工作台
 
-### 版本技术栈
+面向车企市场/公关传播岗的浏览器端工作台：从原始素材（粘贴文字 / docx / pdf / txt / 飞书文档 / 图片 OCR）AI 生成结构化传播 Brief，支持模块化在线编辑、违禁词实时扫描高亮与替换建议，并可导出 Word（.docx）。
 
-- **Framework**: Next.js 16 (App Router)
-- **Core**: React 19
-- **Language**: TypeScript 5
-- **UI 组件**: shadcn/ui (基于 Radix UI)
-- **Styling**: Tailwind CSS 4
+## 技术栈
+
+- Next.js 16（App Router）+ React 19 + TypeScript 5（strict）
+- shadcn/ui（Radix UI）+ Tailwind CSS 4
+- `coze-coding-dev-sdk`（LLM：流式生成 Brief / 合规改写 / 多模态 OCR）
+- `mammoth`（docx 解析）、`pdfjs-dist`（pdf 解析）、`docx` + `file-saver`（Word 导出）
+- 数据持久化：浏览器 `localStorage`（无后端数据库）
+
+## 常用命令
+
+- 安装依赖：`pnpm install`（仅允许 pnpm）
+- 开发：`pnpm run dev`
+- 类型检查：`pnpm ts-check`
+- Lint：`pnpm lint`
+- 构建：`pnpm run build`；生产启动：`pnpm run start`
 
 ## 目录结构
 
 ```
-├── public/                 # 静态资源
-├── scripts/                # 构建与启动脚本
-│   ├── build.sh            # 构建脚本
-│   ├── dev.sh              # 开发环境启动脚本
-│   ├── prepare.sh          # 预处理脚本
-│   └── start.sh            # 生产环境启动脚本
-├── src/
-│   ├── app/                # 页面路由与布局
-│   ├── components/ui/      # Shadcn UI 组件库
-│   ├── hooks/              # 自定义 Hooks
-│   ├── lib/                # 工具库
-│   │   └── utils.ts        # 通用工具函数 (cn)
-│   └── server.ts           # 自定义服务端入口
-├── next.config.ts          # Next.js 配置
-├── package.json            # 项目依赖管理
-└── tsconfig.json           # TypeScript 配置
+src/
+├── app/
+│   ├── page.tsx                    # 首页（最近 Brief + 快捷入口）
+│   ├── briefs/page.tsx             # Brief 列表（空态/入口）
+│   ├── briefs/[id]/page.tsx        # Brief 编辑器（左右分栏工作台）
+│   ├── compliance/page.tsx         # 独立文案合规检测页
+│   ├── library/page.tsx            # 违禁词库管理页
+│   ├── settings/page.tsx           # 设置（飞书凭证 / 模型参数 / 数据管理）
+│   └── api/
+│       ├── ai/generate-brief/      # POST SSE：流式生成结构化 Brief
+│       ├── ai/polish/              # POST：按命中风险词 AI 合规改写
+│       ├── ai/ocr/                 # POST：多模态图片 OCR
+│       └── feishu/read/            # POST：服务端代理飞书文档读取
+├── components/
+│   ├── ui/                         # shadcn/ui
+│   ├── app-shell.tsx               # 左侧导航外壳
+│   ├── highlighted-text.tsx        # 风险词高亮文本（合规页用）
+│   ├── risk-badge.tsx              # 风险等级徽章 / 总览标签
+│   ├── brief/                      # Brief 列表、素材面板、模块卡、编辑器
+│   └── library/word-edit-dialog.tsx
+├── hooks/
+│   ├── useAppState.tsx             # 全局状态（briefs/词库/设置）+ 持久化
+│   ├── useBriefAI.ts               # SSE 流式接收 + 模块标记解析
+│   └── useCompliance.ts            # 扫描 hooks（单文本 / 多模块）
+├── lib/
+│   ├── types.ts                    # 全部领域类型与 MODULE_META
+│   ├── scanner.ts                  # 违禁词扫描引擎（含重叠去重、长词优先）
+│   ├── storage.ts                  # localStorage 读写 + 默认设置
+│   ├── defaults.ts                 # Brief/模块工厂
+│   ├── fileParser.ts               # docx/pdf/txt 解析
+│   ├── docxExport.ts               # 导出 .docx
+│   ├── utils.ts                    # cn / 时间格式化
+│   └── data/
+│       ├── forbiddenWords.ts       # 汇总导出 BUILTIN_WORDS
+│       └── part1~6.ts              # 564 条内置默认词库分片
+└── server.ts                       # 自定义 Node 服务入口
 ```
 
-- 项目文件（如 app 目录、pages 目录、components 等）默认初始化到 `src/` 目录下。
+## 核心数据模型
 
-## 包管理规范
+- `Brief`：含 `modules: BriefModule[]`（11 个标准模块 key 见 `MODULE_META`，可加自定义模块）、`sourceText/sourceName`（原始素材）、风险计数字段。
+- `ForbiddenWord`：`word / category / level(high|medium|low) / reason / suggestion / scope(通用|汽车行业)`，内置 564 条（id 前缀 `bw-`，`builtin:true`）；用户自定义词条存独立 key。
+- 内置词条「停用」= 加入 `hiddenBuiltin` 列表（不物理删除，可恢复）；自定义词支持真正增删改。「恢复默认词库」清空自定义词与停用记录。
 
-**仅允许使用 pnpm** 作为包管理器，**严禁使用 npm 或 yarn**。
-**常用命令**：
-- 安装依赖：`pnpm add <package>`
-- 安装开发依赖：`pnpm add -D <package>`
-- 安装所有依赖：`pnpm install`
-- 移除依赖：`pnpm remove <package>`
+## 扫描引擎（scanner.ts）
 
-## 开发规范
+- `scanText(text, library)`：返回 `ScanResult { hits, highCount, mediumCount, lowCount, total }`，每个 `ScanHit` 含位置区间 `[start,end)` 与词条详情。
+- 多词重叠时按「高风险优先、长词优先、位置靠前」保留；`aggregateHits` 按词聚合计数；`replaceAllWord` 用于一键替换。
+- 模块卡用「透明 textarea + 高亮叠层」双层层叠实现边编辑边高亮，两层必须保持相同字体、字号、行高、内边距与换行方式。
 
-### 编码规范
+## AI 接口约定
 
-- 默认按 TypeScript `strict` 心智写代码；优先复用当前作用域已声明的变量、函数、类型和导入，禁止引用未声明标识符或拼错变量名。
-- 禁止隐式 `any` 和 `as any`；函数参数、返回值、解构项、事件对象、`catch` 错误在使用前应有明确类型或先完成类型收窄，并清理未使用的变量和导入。
+- `POST /api/ai/generate-brief`（SSE）：入参 `{ material, requirement?, model?, temperature? }`；事件 `event: delta {text}` / `event: done` / `event: error`。模型正文中以 `<<<MODULE:key|模块名>>>` 标记模块边界，由 `useBriefAI.parseModules` 切分。
+- `POST /api/ai/polish`：`{ text, items:[{word,suggestion}], model?, temperature? }` → `{ text }`。
+- `POST /api/ai/ocr`：`{ image: data:image/...;base64,xxx, model? }` → `{ text }`（多模态模型）。
+- `POST /api/feishu/read`：`{ url, appId, appSecret }`，服务端代理换取 tenant_access_token 并读取 docx/doc/wiki/sheet；未配置凭证返回 400 + `code:"FEISHU_NOT_CONFIGURED"`。凭证只存浏览器 localStorage，随请求发送，不落服务端。
+- route.ts 仅允许导出 HTTP 方法与 `runtime/maxDuration` 等约定符号，禁止导出普通函数/常量（Next 类型约束）。
 
-### next.config 配置规范
+## 编码规范
 
-- 配置的路径不要写死绝对路径，必须使用 path.resolve(__dirname, ...)、import.meta.dirname 或 process.cwd() 动态拼接。
-
-### Hydration 问题防范
-
-1. 严禁在 JSX 渲染逻辑中直接使用 typeof window、Date.now()、Math.random() 等动态数据。**必须使用 'use client' 并配合 useEffect + useState 确保动态内容仅在客户端挂载后渲染**；同时严禁非法 HTML 嵌套（如 <p> 嵌套 <div>）。
-2. **禁止使用 head 标签**，优先使用 metadata，详见文档：https://nextjs.org/docs/app/api-reference/functions/generate-metadata
-   1. 三方 CSS、字体等资源可在 `globals.css` 中顶部通过 `@import` 引入或使用 next/font
-   2. preload, preconnect, dns-prefetch 通过 ReactDOM 的 preload、preconnect、dns-prefetch 方法引入
-   3. json-ld 可阅读 https://nextjs.org/docs/app/guides/json-ld
-
-## UI 设计与组件规范 (UI & Styling Standards)
-
-- 模板默认预装核心组件库 `shadcn/ui`，位于`src/components/ui/`目录下
-- Next.js 项目**必须默认**采用 shadcn/ui 组件、风格和规范，**除非用户指定用其他的组件和规范。**
+- TypeScript strict：禁隐式 any / as any；参数与返回值显式类型。
+- 客户端动态内容（Date/Math.random/localStorage）必须 `'use client'` + useEffect/useState，避免 hydration 不匹配；id 生成走 `uid()` 且仅在事件回调中调用。
+- 包管理仅用 pnpm；路径配置用 `path.resolve` / `import.meta.dirname`，不写死绝对路径。
+- UI 统一使用 shadcn/ui 与 Tailwind token（primary 酒红 #8C1D40，见 DESIGN.md）。

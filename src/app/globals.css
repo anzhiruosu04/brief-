@@ -55,38 +55,50 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.5rem;
+  --background: #f5f6f8;
+  --foreground: #1f2329;
+  --card: #ffffff;
+  --card-foreground: #1f2329;
+  --popover: #ffffff;
+  --popover-foreground: #1f2329;
+  /* 品牌主色：深石墨蓝 */
+  --primary: #1f4e79;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f4;
+  --secondary-foreground: #1f2329;
+  --muted: #f2f3f5;
+  --muted-foreground: #646a73;
+  --accent: #eef3f8;
+  --accent-foreground: #1f4e79;
+  --destructive: #d93026;
+  --border: #e5e6eb;
+  --input: #e5e6eb;
+  --ring: #1f4e7955;
+  --chart-1: #1f4e79;
+  --chart-2: #1a8754;
+  --chart-3: #d97a00;
+  --chart-4: #4e79a7;
+  --chart-5: #a8801c;
+  --sidebar: #fafbfc;
+  --sidebar-foreground: #1f2329;
+  --sidebar-primary: #1f4e79;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef3f8;
+  --sidebar-accent-foreground: #1f4e79;
+  --sidebar-border: #e5e6eb;
+  --sidebar-ring: #1f4e7955;
+}
+
+:root {
+  /* 风险三色体系 */
+  --risk-high: #d93026;
+  --risk-high-bg: #fdecec;
+  --risk-medium: #d97a00;
+  --risk-medium-bg: #fdf3e3;
+  --risk-low: #a8801c;
+  --risk-low-bg: #faf4e0;
+  --safe: #1a8754;
 }
 
 .dark {
@@ -133,5 +145,91 @@
 }
 
 body {
-  @apply font-sans;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
+    'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* 违禁词风险高亮（风险色仅限此处使用） */
+.risk-hit {
+  border-radius: 2px;
+  padding: 0 1px;
+  font-weight: 500;
+  cursor: help;
+}
+.risk-high {
+  background: var(--risk-high-bg);
+  color: var(--risk-high);
+  text-decoration: underline wavy var(--risk-high) 1.5px;
+  text-underline-offset: 3px;
+}
+.risk-medium {
+  background: var(--risk-medium-bg);
+  color: var(--risk-medium);
+  text-decoration: underline wavy var(--risk-medium) 1.5px;
+  text-underline-offset: 3px;
+}
+.risk-low {
+  background: var(--risk-low-bg);
+  color: var(--risk-low);
+  text-decoration: underline wavy var(--risk-low) 1.5px;
+  text-underline-offset: 3px;
+}
+.risk-flash {
+  animation: risk-flash 1.2s ease 2;
+}
+@keyframes risk-flash {
+  0%,
+  100% {
+    outline: 0 solid transparent;
+  }
+  50% {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+}
+
+/* AI 流式生成落位动效 */
+.module-enter {
+  animation: module-in 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes module-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.skeleton-breathe {
+  animation: breathe 1.6s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 细滚动条 */
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: #d6d8dc;
+  border-radius: 3px;
+}
+.thin-scroll::-webkit-scrollbar-thumb:hover {
+  background: #b9bcc2;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
