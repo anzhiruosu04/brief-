@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -15,6 +16,22 @@ const NAV = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+
+  // 全局兜底：当文件被拖到放置区之外时，阻止浏览器默认行为（直接打开/下载文件导致离开页面）。
+  // DropZone 内部已 stopPropagation，因此合法投放不受影响。
+  useEffect(() => {
+    const isFileDrag = (e: DragEvent) =>
+      Array.from(e.dataTransfer?.types ?? []).includes('Files');
+    const prevent = (e: DragEvent) => {
+      if (isFileDrag(e)) e.preventDefault();
+    };
+    window.addEventListener('dragover', prevent);
+    window.addEventListener('drop', prevent);
+    return () => {
+      window.removeEventListener('dragover', prevent);
+      window.removeEventListener('drop', prevent);
+    };
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-page-bg">

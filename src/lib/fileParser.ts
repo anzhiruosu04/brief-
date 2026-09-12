@@ -71,3 +71,84 @@ export function fileToDataUri(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
+export type MaterialKind = 'image' | 'document' | 'unsupported';
+
+const DOC_EXTENSIONS = ['txt', 'md', 'csv', 'docx', 'pdf'];
+
+/**
+ * 判断导入素材类型。微信/飞书拖拽出的文件可能没有扩展名或文件名被改写，
+ * 因此优先依据 MIME 类型，再回退到扩展名。
+ */
+export function detectMaterialKind(file: File): MaterialKind {
+  const type = file.type.toLowerCase();
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (type.startsWith('image/')) return 'image';
+  if (
+    type === 'application/pdf' ||
+    type.startsWith('text/') ||
+    type ===
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    (DOC_EXTENSIONS.includes(ext) && ext !== '')
+  ) {
+    return 'document';
+  }
+  // 无 MIME 但扩展名可识别
+  if (DOC_EXTENSIONS.includes(ext)) return 'document';
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'heic', 'heif'].includes(ext)) {
+    return 'image';
+  }
+  return 'unsupported';
+}
+
+export interface ImportedMaterial {
+  kind: MaterialKind;
+  text: string;
+  name: string;
+  /** 图片 OCR 时附带的 data URI 缩略图 */
+  preview?: string;
+}
+
+export interface ImportOptions {
+  ocrModel?: string;
+  /** 自定义 OCR 提示词 */
+  ocrPrompt?: string;
+}
+
+/**
+ * 统一素材导入入口：
+ * - 图片（含微信/飞书截图、粘贴的剪贴板位图）→ 多模态 OCR
+ * - 文档 docx/pdf/txt/md/csv → 本地解析
+ * 不支持的类型直接抛出可读错误。
+ */
+export async function importMaterial(
+  file: File,
+  options: ImportOptions = {},
+): Promise<ImportedMaterial> {
+  const kind = detectMaterialKind(file);
+  if (kind === 'image') {
+    const dataUri = await fileToDataUri(file);
+    const resp = await fetch('/api/ai/ocr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image: dataUri,
+        model: options.ocrModel,
+        prompt:
+          options.ocrPrompt ??
+          '请识别图片中的全部中文文字内容，保持原有段落顺序，仅输出识别到的文字本身，不要添加解释。',
+      }),
+    });
+    const data = (await resp.json()) as { text?: string; error?: string };
+    if (!resp.ok || !data.text) {
+      throw new Error(data.error ?? '图片文字识别失败');
+    }
+    const name = file.name && file.name !== 'image.png' ? file.name : '剪贴板/截图 OCR';
+    return { kind: 'image', text: data.text.trim(), name, preview: dataUri };
+  }
+  if (kind === 'document') {
+    const parsed = await parseFile(file);
+    return { kind: 'document', text: parsed.text, name: parsed.name };
+  }
+  throw new Error('暂不支持该文件类型，可拖入图片（截图）或 docx / pdf / txt 文档');
+}

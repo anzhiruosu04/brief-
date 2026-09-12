@@ -9,6 +9,7 @@ import {
   Loader2,
   X,
   FileText,
+  Image as ImageIcon,
   Sparkles,
   Info,
 } from 'lucide-react';
@@ -21,9 +22,9 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
+import { DropZone } from '@/components/material/drop-zone';
 import { useAppState } from '@/hooks/useAppState';
-import { parseFile } from '@/lib/fileParser';
-import { cn } from '@/lib/utils';
+import { importMaterial, type ImportedMaterial } from '@/lib/fileParser';
 import { GenStatus } from '@/hooks/useBriefAI';
 
 export interface MaterialState {
@@ -32,7 +33,7 @@ export interface MaterialState {
   requirement: string;
 }
 
-const ACCEPT = '.txt,.md,.csv,.docx,.pdf';
+const ACCEPT = '.txt,.md,.csv,.docx,.pdf,image/*';
 
 export function MaterialPanel({
   material,
@@ -47,9 +48,10 @@ export function MaterialPanel({
 }) {
   const { settings } = useAppState();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [lastImportKind, setLastImportKind] =
+    useState<ImportedMaterial['kind'] | null>(null);
   const [feishuUrl, setFeishuUrl] = useState('');
   const [feishuLoading, setFeishuLoading] = useState(false);
   const [feishuError, setFeishuError] = useState<string | null>(null);
@@ -60,17 +62,24 @@ export function MaterialPanel({
   const setText = (text: string, name = material.name) =>
     onChange({ ...material, text, name });
 
+  const applyImport = (m: ImportedMaterial) => {
+    setParseError(null);
+    setLastImportKind(m.kind);
+    setText(m.text, m.name);
+  };
+
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setParsing(true);
     setParseError(null);
     try {
-      const parsed = await parseFile(files[0]);
-      setText(parsed.text, parsed.name);
+      const m = await importMaterial(files[0], { ocrModel: settings.aiModel });
+      applyImport(m);
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : '文件解析失败');
+      setParseError(err instanceof Error ? err.message : '素材导入失败');
     } finally {
       setParsing(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -103,7 +112,12 @@ export function MaterialPanel({
   const generating = genStatus === 'thinking' || genStatus === 'writing';
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <DropZone
+      onImport={applyImport}
+      ocrModel={settings.aiModel}
+      fill={false}
+      className="flex h-full min-h-0 flex-col"
+    >
       <div className="min-h-0 flex-1 overflow-y-auto thin-scroll">
         <Tabs defaultValue="paste" className="w-full">
           <TabsList className="mx-5 mt-4 grid w-[calc(100%-2.5rem)] grid-cols-3">
@@ -141,38 +155,26 @@ export function MaterialPanel({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                void handleFiles(e.dataTransfer.files);
-              }}
-              className={cn(
-                'flex min-h-[220px] w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed transition-colors',
-                dragOver
-                  ? 'border-primary bg-primary/5'
-                  : 'border-line bg-slate-50/60 hover:border-primary/50',
-              )}
+              className="flex min-h-[220px] w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line bg-slate-50/60 text-center transition-colors hover:border-primary/50"
             >
               {parsing ? (
                 <>
                   <Loader2 size={26} className="animate-spin text-primary" />
                   <span className="text-sm text-muted-foreground">
-                    正在解析文件…
+                    正在识别 / 解析…
                   </span>
                 </>
               ) : (
                 <>
-                  <FileUp size={26} className="text-slate-400" />
+                  <span className="flex items-center gap-3">
+                    <ImageIcon size={24} className="text-slate-400" />
+                    <FileUp size={24} className="text-slate-400" />
+                  </span>
                   <span className="text-sm font-medium">
-                    点击选择或拖拽文件到此处
+                    点击选择文件，或直接把微信 / 飞书截图、文档拖到左侧素材区
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    支持 DOCX / PDF / TXT，单文件最多提取 20 万字符
+                    图片自动 OCR 识别 · 支持 DOCX / PDF / TXT，也可 Ctrl+V 粘贴截图
                   </span>
                 </>
               )}
@@ -182,7 +184,11 @@ export function MaterialPanel({
             )}
             {material.name && (
               <div className="mt-2 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
-                <FileText size={13} />
+                {lastImportKind === 'image' ? (
+                  <ImageIcon size={13} />
+                ) : (
+                  <FileText size={13} />
+                )}
                 <span className="truncate">已载入：{material.name}</span>
                 <button
                   type="button"
@@ -309,6 +315,6 @@ export function MaterialPanel({
           )}
         </Button>
       </div>
-    </div>
+    </DropZone>
   );
 }

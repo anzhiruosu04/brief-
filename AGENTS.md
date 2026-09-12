@@ -39,19 +39,21 @@ src/
 │   ├── app-shell.tsx               # 左侧导航外壳
 │   ├── highlighted-text.tsx        # 风险词高亮文本（合规页用）
 │   ├── risk-badge.tsx              # 风险等级徽章 / 总览标签
-│   ├── home/quick-generate.tsx     # 首页一键生成（粘贴/上传→建Brief→带autogen跳转）
+│   ├── home/quick-generate.tsx     # 首页一键生成（粘贴/上传/拖入/粘贴截图→建Brief→带autogen跳转）
+│   └── material/drop-zone.tsx      # 通用素材拖放容器（拖拽+Ctrl/Cmd+V粘贴，图片自动OCR/文档自动解析）
 │   ├── brief/                      # 列表、素材面板、模块卡、编辑器、brief-preview 成品预览
 │   └── library/word-edit-dialog.tsx
 ├── hooks/
 │   ├── useAppState.tsx             # 全局状态（briefs/词库/设置）+ 持久化
 │   ├── useBriefAI.ts               # SSE 流式接收 + 模块标记解析
+│   ├── useMaterialDrop.ts          # 素材拖拽/粘贴 hook（微信飞书截图与文档、剪贴板位图）
 │   └── useCompliance.ts            # 扫描 hooks（单文本 / 多模块）
 ├── lib/
 │   ├── types.ts                    # 全部领域类型与 MODULE_META
 │   ├── scanner.ts                  # 违禁词扫描引擎（含重叠去重、长词优先）
 │   ├── storage.ts                  # localStorage 读写 + 默认设置
 │   ├── defaults.ts                 # Brief/模块工厂
-│   ├── fileParser.ts               # docx/pdf/txt 解析
+│   ├── fileParser.ts               # docx/pdf/txt 解析 + importMaterial(图片走OCR/文档走解析)+类型探测
 │   ├── docxExport.ts               # 导出 .docx
 │   ├── utils.ts                    # cn / 时间格式化
 │   └── data/

@@ -18,10 +18,11 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { LevelBadge, OverallRiskTag } from '@/components/risk-badge';
 import { HighlightedText } from '@/components/highlighted-text';
+import { DropZone } from '@/components/material/drop-zone';
 import { useAppState } from '@/hooks/useAppState';
 import { useScan } from '@/hooks/useCompliance';
 import { aggregateHits, replaceAllWord } from '@/lib/scanner';
-import { parseFile, fileToDataUri } from '@/lib/fileParser';
+import { importMaterial, type ImportedMaterial } from '@/lib/fileParser';
 import { downloadText } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { ScanHit } from '@/lib/types';
@@ -45,47 +46,23 @@ export default function CompliancePage() {
   const result = useScan(text, activeLibrary);
   const aggregated = aggregateHits(result);
 
-  const handleFile = async (file: File | undefined) => {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const parsed = await parseFile(file);
-      setText(parsed.text);
-      setSourceName(parsed.name);
-      setTab('paste');
-      setImagePreview(null);
-      toast.success(`已解析 ${parsed.name}，共 ${parsed.text.length} 字`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '文件解析失败');
-    } finally {
-      setBusy(false);
-    }
+  const applyImport = (m: ImportedMaterial) => {
+    setText(m.text);
+    setSourceName(m.name);
+    setImagePreview(m.preview ?? null);
+    setTab('paste');
   };
 
-  const handleImage = async (file: File | undefined) => {
+  const handlePickerFile = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
     try {
-      const dataUri = await fileToDataUri(file);
-      setImagePreview(dataUri);
-      const resp = await fetch('/api/ai/ocr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: dataUri,
-          model: settings.aiModel,
-          prompt:
-            '请识别图片中的全部中文文字内容，保持原有段落顺序，仅输出识别到的文字本身，不要添加解释。',
-        }),
-      });
-      const data = (await resp.json()) as { text?: string; error?: string };
-      if (!resp.ok || !data.text) throw new Error(data.error ?? 'OCR 识别失败');
-      setText(data.text);
-      setSourceName(file.name);
-      setTab('paste');
-      toast.success('图片文字识别完成');
+      const m = await importMaterial(file, { ocrModel: settings.aiModel });
+      applyImport(m);
+      if (m.kind === 'image') toast.success('图片文字识别完成');
+      else toast.success(`已解析 ${m.name}，共 ${m.text.length} 字`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '图片 OCR 失败');
+      toast.error(err instanceof Error ? err.message : '素材导入失败');
     } finally {
       setBusy(false);
     }
@@ -181,8 +158,13 @@ export default function CompliancePage() {
       />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_340px]">
-        {/* 左：输入与高亮 */}
-        <div className="flex min-h-0 flex-col border-r border-line">
+        {/* 左：输入与高亮（整区可拖入图片/文档、可粘贴截图） */}
+        <DropZone
+          onImport={applyImport}
+          ocrModel={settings.aiModel}
+          fill={false}
+          className="flex min-h-0 flex-col border-r border-line"
+        >
           {/* 输入方式切换 */}
           <div className="flex shrink-0 items-center gap-1 border-b border-line bg-white px-4 py-2">
             <TabButton
@@ -209,7 +191,7 @@ export default function CompliancePage() {
               accept=".txt,.md,.csv,.docx,.pdf"
               className="hidden"
               onChange={(e) => {
-                void handleFile(e.target.files?.[0]);
+                void handlePickerFile(e.target.files?.[0]);
                 e.target.value = '';
               }}
             />
@@ -219,7 +201,7 @@ export default function CompliancePage() {
               accept="image/*"
               className="hidden"
               onChange={(e) => {
-                void handleImage(e.target.files?.[0]);
+                void handlePickerFile(e.target.files?.[0]);
                 e.target.value = '';
               }}
             />
@@ -297,7 +279,7 @@ export default function CompliancePage() {
               </div>
             </div>
           )}
-        </div>
+        </DropZone>
 
         {/* 右：风险面板 */}
         <aside className="thin-scroll flex min-h-0 flex-col overflow-y-auto bg-page-bg">
