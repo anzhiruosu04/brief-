@@ -20,7 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex h-screen overflow-hidden bg-page-bg">
       {/* 侧边导航 */}
       <aside className="flex w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-        <div className="flex h-14 items-center gap-2.5 px-5">
+        <Link href="/" className="flex h-14 items-center gap-2.5 px-5">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <ShieldCheck className="h-4.5 w-4.5" size={18} />
           </span>
@@ -32,7 +32,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               汽车传播合规助手
             </div>
           </div>
-        </div>
+        </Link>
 
         <nav className="flex-1 space-y-0.5 px-3 py-3">
           {NAV.map((item) => {

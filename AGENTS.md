@@ -23,9 +23,9 @@
 ```
 src/
 ├── app/
-│   ├── page.tsx                    # 首页（最近 Brief + 快捷入口）
+│   ├── page.tsx                    # 首页（一键生成入口 QuickGenerate + 最近 Brief）
 │   ├── briefs/page.tsx             # Brief 列表（空态/入口）
-│   ├── briefs/[id]/page.tsx        # Brief 编辑器（左右分栏工作台）
+│   ├── briefs/[id]/page.tsx        # Brief 编辑器（?autogen=1 自动生成；编辑/成品预览双视图）
 │   ├── compliance/page.tsx         # 独立文案合规检测页
 │   ├── library/page.tsx            # 违禁词库管理页
 │   ├── settings/page.tsx           # 设置（飞书凭证 / 模型参数 / 数据管理）
@@ -39,7 +39,8 @@ src/
 │   ├── app-shell.tsx               # 左侧导航外壳
 │   ├── highlighted-text.tsx        # 风险词高亮文本（合规页用）
 │   ├── risk-badge.tsx              # 风险等级徽章 / 总览标签
-│   ├── brief/                      # Brief 列表、素材面板、模块卡、编辑器
+│   ├── home/quick-generate.tsx     # 首页一键生成（粘贴/上传→建Brief→带autogen跳转）
+│   ├── brief/                      # 列表、素材面板、模块卡、编辑器、brief-preview 成品预览
 │   └── library/word-edit-dialog.tsx
 ├── hooks/
 │   ├── useAppState.tsx             # 全局状态（briefs/词库/设置）+ 持久化
@@ -73,7 +74,8 @@ src/
 
 ## AI 接口约定
 
-- `POST /api/ai/generate-brief`（SSE）：入参 `{ material, requirement?, model?, temperature? }`；事件 `event: delta {text}` / `event: done` / `event: error`。模型正文中以 `<<<MODULE:key|模块名>>>` 标记模块边界，由 `useBriefAI.parseModules` 切分。
+- `POST /api/ai/generate-brief`（SSE）：入参 `{ material, requirement?, model?, temperature? }`；帧 `event: delta` + `data:{text}` 逐 token 推送模型正文、`event: done`、`event: error {message}`。模型正文中以 `<<<MODULE:key|模块名>>>` 标记模块边界，由 `useBriefAI.generate` 内部 `buildModules` 边接收边切分（处理标记跨 chunk：末尾未闭合标记先截掉），模块 id 按出现序号在流式过程中保持稳定。`generate` 返回 `{ ok, aborted, error? }`。
+- 首页「一键生成」：`QuickGenerate` 创建 Brief（写入 sourceText）→ sessionStorage 存 `autogen:<id>` 一次性指令 → 跳转 `/briefs/<id>?autogen=1`；编辑器 useEffect 读取后自动生成、完成后切到「成品预览」视图。编辑器顶栏可在「编辑 / 成品预览」(`brief-preview.tsx`) 间切换。
 - `POST /api/ai/polish`：`{ text, items:[{word,suggestion}], model?, temperature? }` → `{ text }`。
 - `POST /api/ai/ocr`：`{ image: data:image/...;base64,xxx, model? }` → `{ text }`（多模态模型）。
 - `POST /api/feishu/read`：`{ url, appId, appSecret }`，服务端代理换取 tenant_access_token 并读取 docx/doc/wiki/sheet；未配置凭证返回 400 + `code:"FEISHU_NOT_CONFIGURED"`。凭证只存浏览器 localStorage，随请求发送，不落服务端。

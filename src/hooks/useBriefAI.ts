@@ -33,6 +33,11 @@ interface GenerateParams {
   onModulesChange: (modules: BriefModule[]) => void;
 }
 
+export type GenerateResult =
+  | { ok: true; aborted: false }
+  | { ok: true; aborted: true }
+  | { ok: false; aborted: false; error: string };
+
 interface StreamEvent {
   type?: string;
   [k: string]: unknown;
@@ -65,7 +70,7 @@ export function useBriefAI() {
       model,
       onTitle,
       onModulesChange,
-    }: GenerateParams) => {
+    }: GenerateParams): Promise<GenerateResult> => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -89,145 +94,142 @@ export function useBriefAI() {
 
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = '';
-        const finished: BriefModule[] = [];
-        let current: BriefModule | null = null;
+        // SSE 帧缓冲（按 \n\n 分帧）；textBuffer 为模型正文（含模块标记）的累积
+        let frameBuffer = '';
+        let textBuffer = '';
+        // 同一标记序号在流式过程中保持稳定 id，避免模块卡片频繁重挂载
+        const stableIds: string[] = [];
+        const getId = (index: number): string =>
+          stableIds[index] ?? (stableIds[index] = uid('mod'));
 
-        const flush = () => {
-          const snapshot = current ? [...finished, current] : [...finished];
-          setState((s) => ({ ...s, modules: snapshot }));
-          onModulesChange(snapshot);
+        /**
+         * 将正文按 <<<MODULE:key|模块名>>> 标记切分。
+         * 标记可能跨 chunk 到达：若末尾出现半个标记（'<<<' 起始但无闭合 '>>>'），
+         * 则只解析到该半个标记之前，残片保留在 textBuffer 等待与下一 chunk 拼合。
+         * 返回 safeLen 表示可安全解析的前缀长度。
+         */
+        const buildModules = (full: string): { modules: BriefModule[]; safeLen: number } => {
+          let usable = full.length;
+          const lastOpen = full.lastIndexOf('<<<');
+          if (lastOpen !== -1) {
+            const lastClose = full.lastIndexOf('>>>');
+            if (lastClose < lastOpen) {
+              // 末尾是一个尚未闭合的标记，截掉它及其后内容
+              usable = lastOpen;
+            }
+          }
+          const safe = full.slice(0, usable);
+
+          const segs: { key: BriefModuleKey; title: string; body: string }[] = [];
+          const markerRe = /<<<MODULE:([^|>]+)\|([^>]*)>>>/g;
+          let lastIndex = 0;
+          let curKey: BriefModuleKey | null = null;
+          let curTitle = '';
+          let m: RegExpExecArray | null;
+          while ((m = markerRe.exec(safe)) !== null) {
+            const body = safe.slice(lastIndex, m.index);
+            if (curKey) segs.push({ key: curKey, title: curTitle, body });
+            curKey = (m[1].trim() as BriefModuleKey) || 'custom';
+            curTitle = m[2].trim() || '模块';
+            lastIndex = markerRe.lastIndex;
+          }
+          if (curKey) {
+            segs.push({ key: curKey, title: curTitle, body: safe.slice(lastIndex) });
+          }
+          const modules = segs.map((s, i) => {
+            const meta = resolveModuleMeta(s.title);
+            const known = MODULE_META.find((x) => x.key === s.key);
+            const content = s.body.replace(/^\n+/, '').replace(/\s+$/, '');
+            return {
+              id: getId(i),
+              key: known ? known.key : meta.key,
+              title: s.title,
+              enTitle: known?.enTitle ?? meta.enTitle,
+              content,
+              custom: !known,
+            };
+          });
+          return { modules, safeLen: usable };
         };
+
+        const emit = () => {
+          const { modules: mods } = buildModules(textBuffer);
+          setState((s) => ({
+            ...s,
+            status: mods.length ? 'writing' : 'thinking',
+            modules: mods,
+          }));
+          onModulesChange(mods);
+        };
+
+        let serverError: string | null = null;
 
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
+          frameBuffer += decoder.decode(value, { stream: true });
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith('data:')) continue;
-            const payload = trimmed.slice(5).trim();
-            if (!payload) continue;
-            let evt: StreamEvent;
+          // 按 SSE 帧（空行分隔）处理
+          const frames = frameBuffer.split('\n\n');
+          frameBuffer = frames.pop() ?? '';
+
+          for (const frame of frames) {
+            const lines = frame.split('\n');
+            let event = 'message';
+            let dataStr = '';
+            for (const line of lines) {
+              if (line.startsWith('event:')) event = line.slice(6).trim();
+              else if (line.startsWith('data:')) dataStr += line.slice(5).trim();
+            }
+            if (!dataStr) continue;
+            let data: StreamEvent;
             try {
-              evt = JSON.parse(payload) as StreamEvent;
+              data = JSON.parse(dataStr) as StreamEvent;
             } catch {
               continue;
             }
 
-            switch (evt.type) {
-              case 'status':
-                if (evt.stage === 'thinking') {
-                  setState((s) => ({ ...s, status: 'thinking' }));
-                }
-                break;
-              case 'title':
-                if (typeof evt.title === 'string' && evt.title) {
-                  onTitle?.(evt.title);
-                }
-                break;
-              case 'module_start': {
-                if (current) finished.push(current);
-                const modTitle = String(evt.title ?? '模块');
-                const meta = resolveModuleMeta(modTitle);
-                current = {
-                  id: uid('mod'),
-                  key: meta.key,
-                  title: modTitle,
-                  enTitle: meta.enTitle,
-                  content: '',
-                  custom: meta.key === 'custom',
-                };
-                setState((s) => ({ ...s, status: 'writing' }));
-                flush();
-                break;
-              }
-              case 'module_delta':
-                if (current && typeof evt.delta === 'string') {
-                  current.content += evt.delta;
-                  flush();
-                }
-                break;
-              case 'module_end':
-                if (
-                  current &&
-                  typeof evt.suggestion === 'string' &&
-                  evt.suggestion
-                ) {
-                  current.content +=
-                    (current.content.endsWith('\n') ? '' : '\n') +
-                    `【合规提示】${evt.suggestion}`;
-                  flush();
-                }
-                break;
-              case 'complete': {
-                if (current) finished.push(current);
-                current = null;
-                const rawModules =
-                  (evt.modules as Array<{ title: string; content: string }>) ??
-                  [];
-                const finalModules: BriefModule[] = finished.length
-                  ? finished
-                  : rawModules.map((m) => {
-                      const meta = resolveModuleMeta(m.title);
-                      return {
-                        id: uid('mod'),
-                        key: meta.key,
-                        title: m.title,
-                        enTitle: meta.enTitle,
-                        content: m.content,
-                        custom: meta.key === 'custom',
-                      };
-                    });
-                setState({
-                  status: 'done',
-                  modules: finalModules,
-                  error: null,
-                });
-                onModulesChange(finalModules);
-                break;
-              }
-              case 'error':
-                throw new Error(String(evt.message ?? '生成失败'));
-              default:
-                break;
+            if (event === 'delta' && typeof data.text === 'string') {
+              textBuffer += data.text;
+              emit();
+            } else if (event === 'title' && typeof data.title === 'string') {
+              onTitle?.(data.title);
+            } else if (event === 'done') {
+              // 正常结束
+            } else if (event === 'error') {
+              serverError = String(data.message ?? '生成失败');
             }
           }
         }
 
-        // 流提前结束时以已收集内容兜底
-        if (current) finished.push(current);
-        if (finished.length) {
-          setState((s) =>
-            s.status === 'done'
-              ? s
-              : { status: 'done', modules: finished, error: null },
-          );
-          onModulesChange(finished);
-        } else {
-          setState((s) =>
-            s.status === 'done'
-              ? s
-              : {
-                  status: 'error',
-                  modules: [],
-                  error: '模型未返回有效内容，请更换素材后重试',
-                },
-          );
+        if (serverError) throw new Error(serverError);
+
+        // 收尾：以已累积正文解析出的模块为准
+        const { modules: finalModules } = buildModules(textBuffer);
+        if (finalModules.length) {
+          setState({ status: 'done', modules: finalModules, error: null });
+          onModulesChange(finalModules);
+          return { ok: true, aborted: false };
         }
-      } catch (err) {
-        if ((err as Error).name === 'AbortError') {
-          setState((s) => ({ ...s, status: 'done' }));
-          return;
-        }
+        const emptyError = '模型未返回有效内容，请更换素材后重试';
         setState({
           status: 'error',
           modules: [],
-          error: err instanceof Error ? err.message : '生成失败，请重试',
+          error: emptyError,
         });
+        return { ok: false, aborted: false, error: emptyError };
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          setState((s) => ({ ...s, status: 'done' }));
+          return { ok: true, aborted: true };
+        }
+        const message = err instanceof Error ? err.message : '生成失败，请重试';
+        setState({
+          status: 'error',
+          modules: [],
+          error: message,
+        });
+        return { ok: false, aborted: false, error: message };
       }
     },
     [],

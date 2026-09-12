@@ -11,6 +11,8 @@ import {
   Sparkles,
   PanelLeftOpen,
   AlertTriangle,
+  Eye,
+  PencilLine,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -32,6 +34,7 @@ import {
 import { BriefListPane } from './brief-list-pane';
 import { MaterialPanel, type MaterialState } from './material-panel';
 import { ModuleCard } from './module-card';
+import { BriefPreview } from './brief-preview';
 import { OverallRiskTag, LevelBadge } from '@/components/risk-badge';
 import { useAppState } from '@/hooks/useAppState';
 import { useBriefAI } from '@/hooks/useBriefAI';
@@ -62,7 +65,52 @@ export function BriefEditor({ briefId }: { briefId: string }) {
   const [material, setMaterial] = useState<MaterialState>(materialRef.current);
   const [generating, setGenerating] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [view, setView] = useState<'edit' | 'preview'>('edit');
   const ai = useBriefAI();
+
+  // 首页「一键生成」：读取一次性自动生成指令并立即执行，完成后进入成品预览
+  const autogenRef = useRef(false);
+  useEffect(() => {
+    if (!ready || !brief || autogenRef.current) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('autogen') !== '1') return;
+    autogenRef.current = true;
+    window.history.replaceState({}, '', `/briefs/${brief.id}`);
+    const key = `autogen:${brief.id}`;
+    let requirement = '';
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (raw) requirement = (JSON.parse(raw) as { requirement?: string }).requirement ?? '';
+      sessionStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    const src = brief.sourceText ?? '';
+    if (!src.trim()) return;
+    setMaterial({ text: src, name: brief.sourceName ?? '', requirement });
+    setView('preview');
+    void (async () => {
+      setGenerating(true);
+      const res = await ai.generate({
+        material: src,
+        requirement,
+        model: settings.aiModel,
+        onTitle: (title) => updateBrief(brief.id, { title }),
+        onModulesChange: (nextModules) => {
+          updateBrief(brief.id, { modules: nextModules });
+        },
+      });
+      setGenerating(false);
+      if (!res.ok) {
+        setView('edit');
+        toast.error(res.error);
+      } else if (!res.aborted) {
+        toast.success('Brief 已生成，可直接查看成品或导出 Word');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, brief]);
 
   // 模块内容（受控本地态，编辑即时写回 store）
   const modules = brief?.modules ?? [];
@@ -144,7 +192,7 @@ export function BriefEditor({ briefId }: { briefId: string }) {
       sourceText: material.text,
       sourceName: material.name || '手动粘贴',
     });
-    await ai.generate({
+    const res = await ai.generate({
       material: material.text,
       requirement: material.requirement,
       model: settings.aiModel,
@@ -154,9 +202,9 @@ export function BriefEditor({ briefId }: { briefId: string }) {
       },
     });
     setGenerating(false);
-    if (ai.state.status === 'error') {
-      toast.error(ai.state.error ?? '生成失败');
-    } else {
+    if (!res.ok) {
+      toast.error(res.error);
+    } else if (!res.aborted) {
       toast.success('Brief 已生成，请逐模块核对并修改');
     }
   };
@@ -193,18 +241,20 @@ export function BriefEditor({ briefId }: { briefId: string }) {
         <BriefListPane />
       </div>
 
-      {/* 中间：素材输入 */}
-      <div className="hidden w-[380px] shrink-0 flex-col border-r border-line xl:flex">
-        <MaterialPanel
-          material={material}
-          onChange={setMaterial}
-          onGenerate={() => void handleGenerate()}
-          genStatus={ai.state.status}
-        />
-      </div>
+      {/* 中间：素材输入（仅编辑视图显示） */}
+      {view === 'edit' && (
+        <div className="hidden w-[380px] shrink-0 flex-col border-r border-line xl:flex">
+          <MaterialPanel
+            material={material}
+            onChange={setMaterial}
+            onGenerate={() => void handleGenerate()}
+            genStatus={ai.state.status}
+          />
+        </div>
+      )}
 
-      {/* 右侧：模块化编辑器 */}
-      <div className="flex min-w-0 flex-1 flex-col bg-page-bg">
+      {/* 右侧：模块化编辑器 / 成品预览 */}
+      <div className="relative flex min-w-0 flex-1 flex-col bg-page-bg">
         {/* 编辑器顶栏 */}
         <div className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-white px-4">
           <Sheet>
@@ -233,7 +283,7 @@ export function BriefEditor({ briefId }: { briefId: string }) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="xl:hidden"
+                className={cn('xl:hidden', view !== 'edit' && 'hidden')}
                 title="素材输入"
               >
                 <Sparkles size={17} />
@@ -275,10 +325,40 @@ export function BriefEditor({ briefId }: { briefId: string }) {
                 lowCount: result.lowCount,
               }}
             />
-            <Button variant="outline" size="sm" onClick={handleSaveMaterial}>
-              <Save size={14} />
-              保存素材
-            </Button>
+            <div className="flex items-center rounded-md border border-line p-0.5">
+              <button
+                type="button"
+                onClick={() => setView('edit')}
+                className={cn(
+                  'flex items-center gap-1 rounded px-2.5 py-1 text-xs transition-colors',
+                  view === 'edit'
+                    ? 'bg-slate-100 font-medium text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <PencilLine size={13} />
+                编辑
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('preview')}
+                className={cn(
+                  'flex items-center gap-1 rounded px-2.5 py-1 text-xs transition-colors',
+                  view === 'preview'
+                    ? 'bg-slate-100 font-medium text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Eye size={13} />
+                成品预览
+              </button>
+            </div>
+            {view === 'edit' && (
+              <Button variant="outline" size="sm" onClick={handleSaveMaterial}>
+                <Save size={14} />
+                保存素材
+              </Button>
+            )}
             <Button size="sm" onClick={() => void handleExport()}>
               <Download size={14} />
               导出 Word
@@ -286,6 +366,10 @@ export function BriefEditor({ briefId }: { briefId: string }) {
           </div>
         </div>
 
+        {view === 'preview' ? (
+          <BriefPreview brief={brief} result={result} generating={isGenActive} />
+        ) : (
+          <>
         {/* 扫描概览条 */}
         <div className="flex shrink-0 items-center gap-3 border-b border-line bg-white px-5 py-2 text-xs">
           <ShieldCheck size={14} className="text-primary" />
@@ -377,10 +461,12 @@ export function BriefEditor({ briefId }: { briefId: string }) {
             </div>
           </div>
         </div>
+          </>
+        )}
 
         {/* AI 生成中浮动状态 */}
         {isGenActive && (
-          <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2">
+          <div className="pointer-events-none absolute bottom-6 left-1/2 z-10 -translate-x-1/2">
             <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-primary/20 bg-white px-4 py-2 text-xs font-medium text-primary shadow-lg">
               <Loader2 size={14} className="animate-spin" />
               {ai.state.status === 'thinking'
@@ -397,8 +483,10 @@ export function BriefEditor({ briefId }: { briefId: string }) {
           </div>
         )}
 
-        {/* 风险词汇总（右侧抽屉式卡片，桌面端固定在右下角） */}
-        {result.total > 0 && <RiskSummary brief={brief} aggregated={aggregated} />}
+        {/* 风险词汇总（仅编辑视图显示） */}
+        {view === 'edit' && result.total > 0 && (
+          <RiskSummary brief={brief} aggregated={aggregated} />
+        )}
       </div>
     </div>
   );
