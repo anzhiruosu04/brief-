@@ -24,6 +24,16 @@ interface DragState {
 }
 
 /**
+ * 判断拖拽数据中是否含文件。
+ * 注意：DataTransfer.types 规范中文件类型为大写 "Files"（Firefox 下为小写 "application/x-moz-file"），
+ * 必须大小写不敏感判断，否则微信/飞书/文件管理器拖入会被直接忽略。
+ */
+function dragHasFiles(e: React.DragEvent): boolean {
+  const types = Array.from(e.dataTransfer?.types ?? []).map((t) => t.toLowerCase());
+  return types.includes('files') || types.includes('application/x-moz-file');
+}
+
+/**
  * 统一素材拖入 / 粘贴 hook。
  * - 给目标容器 ref 绑定 dragover/drop，支持从微信、飞书、访资管理器直接拖入图片或文档；
  * - 监听 paste，支持直接 Ctrl/Cmd+V 粘贴截图（剪贴板位图）；
@@ -75,20 +85,20 @@ export function useMaterialDrop({
 
   // 拖拽（绑定到容器）
   const onDragEnter = useCallback((e: React.DragEvent) => {
-    if (!e.dataTransfer?.types?.includes('files')) return;
+    if (!dragHasFiles(e)) return;
     e.preventDefault();
     dragCounter.current += 1;
     setDrag({ active: true, hasFiles: true });
   }, []);
 
   const onDragOver = useCallback((e: React.DragEvent) => {
-    if (!e.dataTransfer?.types?.includes('files')) return;
+    if (!dragHasFiles(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   }, []);
 
   const onDragLeave = useCallback((e: React.DragEvent) => {
-    if (!e.dataTransfer?.types?.includes('files')) return;
+    if (!dragHasFiles(e)) return;
     e.preventDefault();
     dragCounter.current = Math.max(0, dragCounter.current - 1);
     if (dragCounter.current === 0) {
@@ -98,12 +108,18 @@ export function useMaterialDrop({
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
-      if (!e.dataTransfer?.types?.includes('files')) return;
+      if (!dragHasFiles(e)) return;
       e.preventDefault();
       e.stopPropagation();
       dragCounter.current = 0;
       setDrag({ active: false, hasFiles: false });
-      void importFiles(e.dataTransfer.files);
+      // 除标准 files 外，部分来源会把文件信息放进 items，统一兜底提取
+      const dropped = e.dataTransfer.files;
+      if (!dropped || dropped.length === 0) {
+        toast.error('未读取到文件内容，请改用「点击上传」或 Ctrl/Cmd+V 粘贴截图');
+        return;
+      }
+      void importFiles(dropped);
     },
     [importFiles],
   );
