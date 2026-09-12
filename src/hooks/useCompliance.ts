@@ -12,8 +12,11 @@ export function useScan(text: string, library: ForbiddenWord[]): ScanResult {
 /** 多模块聚合扫描（按模块 id 分组命中）。
  *  合规备注(notes)模块中被引号包裹的禁用词属于"反面示例引用"，开启 ignoreQuoted 豁免，
  *  其余模块仍严格全量扫描。 */
+/** 合规备注类模块（反面引用豁免）：通用模板 notes + KOC 模板的红线/口径/车名模块 */
+const NOTE_KEYS = new Set(['notes', 'complianceRedline', 'wordingGuide', 'namingRule']);
+
 export function useModuleScan(
-  modules: Array<{ id: string; key?: string; content: string }>,
+  modules: Array<{ id: string; key?: string; content: string; kind?: string }>,
   library: ForbiddenWord[],
 ): {
   byModule: Map<string, ScanResult>;
@@ -24,8 +27,9 @@ export function useModuleScan(
     const byModule = new Map<string, ScanResult>();
     const all: ScanHit[] = [];
     modules.forEach((m) => {
+      const isNote = m.kind === 'note' || (m.key ? NOTE_KEYS.has(m.key) : false);
       const result = scanText(m.content, library, {
-        ignoreQuoted: m.key === 'notes',
+        ignoreQuoted: isNote,
       });
       byModule.set(m.id, result);
       result.hits.forEach((h) => all.push({ ...h, moduleId: m.id }));

@@ -41,20 +41,23 @@ src/
 │   ├── risk-badge.tsx              # 风险等级徽章 / 总览标签
 │   ├── home/quick-generate.tsx     # 首页一键生成（粘贴/上传/拖入/粘贴截图→建Brief→带autogen跳转）
 │   └── material/drop-zone.tsx      # 通用素材拖放容器（拖拽+Ctrl/Cmd+V粘贴，图片自动OCR/文档自动解析）
-│   ├── brief/                      # 列表、素材面板、模块卡、编辑器、brief-preview 成品预览
+│   ├── brief/                      # 列表、素材面板、模块卡、编辑器、brief-preview 成品预览、blocks-view 块渲染
 │   └── library/word-edit-dialog.tsx
 ├── hooks/
 │   ├── useAppState.tsx             # 全局状态（briefs/词库/设置）+ 持久化
-│   ├── useBriefAI.ts               # SSE 流式接收 + 模块标记解析
-│   ├── useMaterialDrop.ts          # 素材拖拽/粘贴 hook（微信飞书截图与文档、剪贴板位图）
-│   └── useCompliance.ts            # 扫描 hooks（单文本 / 多模块）
+│   ├── useBriefAI.ts               # SSE 流式接收 + 标题/模块标记解析
+│   ├── useMaterialDrop.ts          # 素材拖拽/粘贴 hook（DataTransfer.types 大小写不敏感；微信飞书截图与文档、剪贴板位图）
+│   └── useCompliance.ts            # 扫描 hooks（单文本 / 多模块；note 类模块开启反面引用豁免）
 ├── lib/
-│   ├── types.ts                    # 全部领域类型与 MODULE_META
-│   ├── scanner.ts                  # 违禁词扫描引擎（含重叠去重、长词优先）
+│   ├── types.ts                    # 全部领域类型、MODULE_META、模板类型（BriefTemplateId/Kind/TemplateModuleDef）
+│   ├── templates.ts                # 客户端双模板：GENERAL_TEMPLATE(11 模块) / KOC_TEMPLATE(20 模块)，含 placeholder
+│   ├── blocks.ts                   # parseBlocks：把模块正文解析为 table/heading/ordered/bullet/paragraph
+│   ├── server-templates.ts         # 服务端生成模板规格 + buildSystemPrompt/buildUserPrompt 所需素材
+│   ├── scanner.ts                  # 违禁词扫描引擎（含重叠去重、长词优先、ignoreQuoted 反面引用豁免）
 │   ├── storage.ts                  # localStorage 读写 + 默认设置
-│   ├── defaults.ts                 # Brief/模块工厂
+│   ├── defaults.ts                 # Brief/模块工厂（新建默认 koc 模板）
 │   ├── fileParser.ts               # docx/pdf/txt 解析 + importMaterial(图片走OCR/文档走解析)+类型探测
-│   ├── docxExport.ts               # 导出 .docx
+│   ├── docxExport.ts               # 导出 .docx（按 parseBlocks 渲染真实 Word 表格/列表/小标题）
 │   ├── utils.ts                    # cn / 时间格式化
 │   └── data/
 │       ├── forbiddenWords.ts       # 汇总导出 BUILTIN_WORDS
@@ -62,9 +65,16 @@ src/
 └── server.ts                       # 自定义 Node 服务入口
 ```
 
+## 模板系统（参考《第四代博越 L》KOC 版式）
+
+- `Brief.template: 'general' | 'koc'`；新建默认 `koc`（20 个模块，含六要素速览/信息总表/观点库/合规红线/必带话题等），历史无该字段的 Brief 按 `general`（11 模块）渲染，两套 key 均在 `BriefModuleKey` 联合类型中。
+- 模板定义分两处：客户端 `src/lib/templates.ts`（标题/英文名/placeholder，供 UI）与服务端 `src/lib/server-templates.ts`（给模型的 guide），模块 key 必须一一对应；改模块时两处同步。
+- 模块 `kind: 'rich' | 'note'`：`note`（notes/complianceRedline/wordingGuide/namingRule）为合规口径类，扫描时开启 `ignoreQuoted`（引号包裹且紧跟“不得/禁止/避免”的反面引用不命中）。
+- **轻量块标记**：AI 正文用 Markdown 表格（表头 + `| --- | --- |` 分隔行）、`### 小标题`（观点标题末尾可带 `【★必选】/【★推荐】/【可选】`）、`- ` 无序、`1. ` 有序、普通段落。`parseBlocks`（blocks.ts）是唯一解析入口，预览 `BlocksView` 与 Word 导出 `docxExport` 都消费它，保证两端版式一致。编辑器仍是 textarea（placeholder 内教标记），不引入富文本编辑器。
+
 ## 核心数据模型
 
-- `Brief`：含 `modules: BriefModule[]`（11 个标准模块 key 见 `MODULE_META`，可加自定义模块）、`sourceText/sourceName`（原始素材）、风险计数字段。
+- `Brief`：含 `template` 与 `modules: BriefModule[]`（general 11 / koc 20 个标准模块 key 见 `templates.ts`，可加自定义模块）、`sourceText/sourceName`（原始素材）、风险计数字段。
 - `ForbiddenWord`：`word / category / level(high|medium|low) / reason / suggestion / scope(通用|汽车行业)`，内置 564 条（id 前缀 `bw-`，`builtin:true`）；用户自定义词条存独立 key。
 - 内置词条「停用」= 加入 `hiddenBuiltin` 列表（不物理删除，可恢复）；自定义词支持真正增删改。「恢复默认词库」清空自定义词与停用记录。
 
@@ -72,11 +82,12 @@ src/
 
 - `scanText(text, library)`：返回 `ScanResult { hits, highCount, mediumCount, lowCount, total }`，每个 `ScanHit` 含位置区间 `[start,end)` 与词条详情。
 - 多词重叠时按「高风险优先、长词优先、位置靠前」保留；`aggregateHits` 按词聚合计数；`replaceAllWord` 用于一键替换。
+- 反面引用豁免：①「不得/禁止/严禁/避免/禁用…+风险词」及「非官方指定」等否定语境全局豁免（引导词与命中词之间不得隔着句末标点）；②纯引号包裹豁免只在 note 类模块（`ignoreQuoted:true`）开启。真违规（如正文标题「10万级首选」「性价比最高」）仍然命中。
 - 模块卡用「透明 textarea + 高亮叠层」双层层叠实现边编辑边高亮，两层必须保持相同字体、字号、行高、内边距与换行方式。
 
 ## AI 接口约定
 
-- `POST /api/ai/generate-brief`（SSE）：入参 `{ material, requirement?, model?, temperature? }`；帧 `event: delta` + `data:{text}` 逐 token 推送模型正文、`event: done`、`event: error {message}`。模型正文中以 `<<<MODULE:key|模块名>>>` 标记模块边界，由 `useBriefAI.generate` 内部 `buildModules` 边接收边切分（处理标记跨 chunk：末尾未闭合标记先截掉），模块 id 按出现序号在流式过程中保持稳定。`generate` 返回 `{ ok, aborted, error? }`。
+- `POST /api/ai/generate-brief`（SSE）：入参 `{ material, requirement?, model?, temperature?, template?: 'general'|'koc' }`（缺省 general，但前端新建默认传 koc）；帧 `event: delta` + `data:{text}` 逐 token 推送模型正文、`event: done`、`event: error {message}`。模型正文首行为 `<<<TITLE:Brief标题>>>`（由 useBriefAI 提取后回调 onTitle 写 brief.title），其后以 `<<<MODULE:key|模块名>>>` 标记模块边界，由 `useBriefAI.generate` 内部 `buildModules` 边接收边切分（处理标记跨 chunk：末尾未闭合标记先截掉），模块 id 按出现序号在流式过程中保持稳定。`generate` 返回 `{ ok, aborted, error? }`。
 - 首页「一键生成」：`QuickGenerate` 创建 Brief（写入 sourceText）→ sessionStorage 存 `autogen:<id>` 一次性指令 → 跳转 `/briefs/<id>?autogen=1`；编辑器 useEffect 读取后自动生成、完成后切到「成品预览」视图。编辑器顶栏可在「编辑 / 成品预览」(`brief-preview.tsx`) 间切换。
 - `POST /api/ai/polish`：`{ text, items:[{word,suggestion}], model?, temperature? }` → `{ text }`。
 - `POST /api/ai/ocr`：`{ image: data:image/...;base64,xxx, model? }` → `{ text }`（多模态模型）。
@@ -88,4 +99,4 @@ src/
 - TypeScript strict：禁隐式 any / as any；参数与返回值显式类型。
 - 客户端动态内容（Date/Math.random/localStorage）必须 `'use client'` + useEffect/useState，避免 hydration 不匹配；id 生成走 `uid()` 且仅在事件回调中调用。
 - 包管理仅用 pnpm；路径配置用 `path.resolve` / `import.meta.dirname`，不写死绝对路径。
-- UI 统一使用 shadcn/ui 与 Tailwind token（primary 酒红 #8C1D40，见 DESIGN.md）。
+- UI 统一使用 shadcn/ui 与 Tailwind token（primary 深石墨蓝 #1F4E79，见 DESIGN.md）。

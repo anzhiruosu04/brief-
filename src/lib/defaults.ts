@@ -1,34 +1,55 @@
-import {
-  MODULE_META,
-  type Brief,
-  type BriefModule,
-  type BriefModuleKey,
+import type {
+  Brief,
+  BriefModule,
+  BriefModuleKey,
+  BriefTemplateId,
+  TemplateModuleDef,
 } from './types';
+import { getTemplate } from './templates';
 import { uid } from './storage';
 
+export function createModuleFromDef(def: TemplateModuleDef): BriefModule {
+  return {
+    id: uid('mod'),
+    key: def.key,
+    title: def.title,
+    enTitle: def.enTitle,
+    content: '',
+    kind: def.kind,
+    custom: false,
+  };
+}
+
 export function createModule(key: BriefModuleKey, content = ''): BriefModule {
-  const meta = MODULE_META.find((m) => m.key === key);
+  // 在两套模板里查元信息
+  const def =
+    getTemplate('general').modules.find((m) => m.key === key) ??
+    getTemplate('koc').modules.find((m) => m.key === key);
   return {
     id: uid('mod'),
     key,
-    title: meta?.title ?? key,
-    enTitle: meta?.enTitle ?? '',
+    title: def?.title ?? key,
+    enTitle: def?.enTitle ?? '',
     content,
+    kind: def?.kind,
     custom: key === 'custom',
   };
 }
 
-export function createEmptyModules(): BriefModule[] {
-  return MODULE_META.map((m) => createModule(m.key));
+export function createEmptyModules(template: BriefTemplateId = 'koc'): BriefModule[] {
+  return getTemplate(template).modules.map((m) => createModuleFromDef(m));
 }
 
 export function createBrief(partial?: Partial<Brief>): Brief {
   const now = Date.now();
+  // 新建默认使用 KOC 种草模板；历史数据无 template 字段时按通用模板渲染
+  const template: BriefTemplateId = partial?.template ?? 'koc';
   return {
     id: uid('brief'),
     title: partial?.title ?? '未命名 Brief',
     project: partial?.project ?? '',
-    modules: partial?.modules ?? createEmptyModules(),
+    template,
+    modules: partial?.modules ?? createEmptyModules(template),
     sourceText: partial?.sourceText ?? '',
     sourceName: partial?.sourceName,
     riskLevel: 'none',
@@ -41,7 +62,3 @@ export function createBrief(partial?: Partial<Brief>): Brief {
     updatedAt: partial?.updatedAt ?? now,
   };
 }
-
-export const MODULE_INDEX: Record<string, number> = Object.fromEntries(
-  MODULE_META.map((m, i) => [m.key, i]),
-);

@@ -1,19 +1,33 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { MODULE_META, type BriefModule, type BriefModuleKey } from '@/lib/types';
+import type { BriefModule, BriefModuleKey, TemplateModuleDef } from '@/lib/types';
+import { GENERAL_TEMPLATE, KOC_TEMPLATE } from '@/lib/templates';
 import { uid } from '@/lib/storage';
 
-/** 根据 AI 返回的模块标题匹配标准模块 key，未命中则归为自定义模块 */
-function resolveModuleMeta(title: string): {
-  key: BriefModuleKey;
-  enTitle: string;
-} {
-  const hit = MODULE_META.find(
-    (meta) => title.includes(meta.title) || title.includes(meta.enTitle),
+/** 两套模板的全部模块定义，用于把 AI 输出的 key 映射为标题/英文名/形态 */
+const ALL_DEFS: TemplateModuleDef[] = [
+  ...GENERAL_TEMPLATE.modules,
+  ...KOC_TEMPLATE.modules,
+];
+
+function findDef(key: string): TemplateModuleDef | undefined {
+  return ALL_DEFS.find((d) => d.key === key);
+}
+
+/** 根据 AI 返回的模块标题兜底匹配模块定义，未命中则归为自定义模块 */
+function resolveByTitle(title: string): TemplateModuleDef {
+  const hit = ALL_DEFS.find(
+    (meta) => title.includes(meta.title) || (meta.enTitle && title.includes(meta.enTitle)),
   );
-  if (hit) return { key: hit.key, enTitle: hit.enTitle };
-  return { key: 'custom', enTitle: 'Appendix' };
+  return (
+    hit ?? {
+      key: 'custom',
+      title: title || '附加模块',
+      enTitle: 'Appendix',
+      placeholder: '',
+    }
+  );
 }
 
 export type GenStatus = 'idle' | 'thinking' | 'writing' | 'done' | 'error';
@@ -29,6 +43,7 @@ interface GenerateParams {
   requirement?: string;
   existingTitle?: string;
   model: string;
+  template?: 'general' | 'koc';
   onTitle?: (title: string) => void;
   onModulesChange: (modules: BriefModule[]) => void;
 }
@@ -68,6 +83,7 @@ export function useBriefAI() {
       material,
       requirement,
       model,
+      template = 'general',
       onTitle,
       onModulesChange,
     }: GenerateParams): Promise<GenerateResult> => {
@@ -81,7 +97,7 @@ export function useBriefAI() {
         const resp = await fetch('/api/ai/generate-brief', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ material, requirement, model }),
+          body: JSON.stringify({ material, requirement, model, template }),
           signal: controller.signal,
         });
 
@@ -101,6 +117,16 @@ export function useBriefAI() {
         const stableIds: string[] = [];
         const getId = (index: number): string =>
           stableIds[index] ?? (stableIds[index] = uid('mod'));
+        // 标题只在首次解析到时回调一次
+        let reportedTitle = false;
+
+        /** 提取首行 <<<TITLE:xxx>>>，返回 { title, text }；标记可能跨 chunk */
+        const extractTitle = (full: string): { title: string | null; text: string } => {
+          const m = /^<<<TITLE:([^>]*)>>>/.exec(full.trimStart());
+          if (!m) return { title: null, text: full };
+          const title = m[1].trim();
+          return { title: title || null, text: full.replace(/^\s*<<<TITLE:[^>]*>>>\s*/, '') };
+        };
 
         /**
          * 将正文按 <<<MODULE:key|模块名>>> 标记切分。
@@ -137,23 +163,29 @@ export function useBriefAI() {
             segs.push({ key: curKey, title: curTitle, body: safe.slice(lastIndex) });
           }
           const modules = segs.map((s, i) => {
-            const meta = resolveModuleMeta(s.title);
-            const known = MODULE_META.find((x) => x.key === s.key);
+            const byKey = findDef(s.key);
+            const def = byKey ?? resolveByTitle(s.title);
             const content = s.body.replace(/^\n+/, '').replace(/\s+$/, '');
             return {
               id: getId(i),
-              key: known ? known.key : meta.key,
-              title: s.title,
-              enTitle: known?.enTitle ?? meta.enTitle,
+              key: def.key,
+              title: s.title || def.title,
+              enTitle: def.enTitle,
               content,
-              custom: !known,
+              kind: def.kind,
+              custom: !byKey,
             };
           });
           return { modules, safeLen: usable };
         };
 
         const emit = () => {
-          const { modules: mods } = buildModules(textBuffer);
+          const { title, text } = extractTitle(textBuffer);
+          if (title && !reportedTitle) {
+            reportedTitle = true;
+            onTitle?.(title);
+          }
+          const { modules: mods } = buildModules(text);
           setState((s) => ({
             ...s,
             status: mods.length ? 'writing' : 'thinking',
@@ -205,7 +237,8 @@ export function useBriefAI() {
         if (serverError) throw new Error(serverError);
 
         // 收尾：以已累积正文解析出的模块为准
-        const { modules: finalModules } = buildModules(textBuffer);
+        const finalText = extractTitle(textBuffer).text;
+        const { modules: finalModules } = buildModules(finalText);
         if (finalModules.length) {
           setState({ status: 'done', modules: finalModules, error: null });
           onModulesChange(finalModules);

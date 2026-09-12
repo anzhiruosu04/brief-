@@ -70,12 +70,13 @@ export function scanText(
   const inQuoted = (start: number, end: number): boolean =>
     ignoreRanges.some(([s, e]) => start >= s && end <= e);
 
-  // 否定/警示语境：命中词前 12 个字符窗口内出现引导词时，视为"反面引用"豁免。
-  // 仅在 ignoreQuoted（合规备注模块）时生效，正文模块与独立合规页不受影响。
-  const NEGATION_RE = /(不[得会能要可]|禁止|严禁|切勿|请勿|避免|勿|杜绝|禁用)/;
+  // 否定/警示语境：命中词前 12 个字符窗口内出现引导词时，视为"反面引用"豁免，全局生效
+  //（如红线模块的"不得将辅助驾驶称为自动驾驶"、剪辑规范的"不得使用夸张特效"）。
+  // 纯引号包裹豁免仍只在 ignoreQuoted（合规备注类模块）时开启。
+  const NEGATION_RE =
+    /(?:非[\s]{0,2}|(?:不[得会能要可]|禁止|严禁|切勿|请勿|避免|勿|杜绝|禁用)[^。！？!?；;\n]{0,12})$/;
   const isNegatedCitation = (start: number): boolean => {
-    if (!options.ignoreQuoted) return false;
-    const before = text.slice(Math.max(0, start - 12), start);
+    const before = text.slice(Math.max(0, start - 16), start);
     return NEGATION_RE.test(before);
   };
 

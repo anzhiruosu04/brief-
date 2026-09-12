@@ -2,16 +2,23 @@
 
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   Footer,
   HeadingLevel,
   Packer,
   PageNumber,
   Paragraph,
+  ShadingType,
+  Table,
+  TableCell,
+  TableRow,
   TextRun,
+  WidthType,
 } from 'docx';
 import { saveAs } from 'file-saver';
 import type { Brief, RiskLevel } from './types';
+import { parseBlocks, type ContentBlock } from './blocks';
 
 const LEVEL_LABEL: Record<RiskLevel, string> = {
   high: '高风险',
@@ -19,20 +26,151 @@ const LEVEL_LABEL: Record<RiskLevel, string> = {
   low: '低风险',
 };
 
-/** 将一段文本按换行拆分为多个段落（空行保留为间隔） */
-function contentParagraphs(content: string): Paragraph[] {
-  const lines = content.split('\n');
-  return lines.map(
-    (line) =>
-      new Paragraph({
-        children: [new TextRun({ text: line || ' ', size: 22, font: '微软雅黑' })],
-        spacing: { after: 120, line: 360 },
-      }),
+const FONT = '微软雅黑';
+const BODY = 21; // 10.5pt
+const HEADER_FILL = 'F2F4F7';
+const BORDER = { style: BorderStyle.SINGLE, size: 4, color: 'D9DDE3' };
+const CELL_BORDERS = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER };
+
+/** 去掉行内 **加粗** 标记，生成 TextRun（保留 #话题 等原文） */
+function inlineRuns(text: string, opts: { bold?: boolean; italics?: boolean; size?: number; color?: string } = {}): TextRun[] {
+  const size = opts.size ?? BODY;
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts
+    .filter((p) => p.length > 0)
+    .map((p) => {
+      const boldMark = /^\*\*[^*]+\*\*$/.test(p);
+      const clean = boldMark ? p.slice(2, -2) : p;
+      return new TextRun({
+        text: clean,
+        bold: opts.bold || boldMark,
+        italics: opts.italics,
+        size,
+        color: opts.color,
+        font: FONT,
+      });
+    });
+}
+
+function bodyParagraph(text: string, opts: { after?: number; italics?: boolean; color?: string } = {}): Paragraph {
+  return new Paragraph({
+    children: inlineRuns(text, { italics: opts.italics, color: opts.color }),
+    spacing: { after: opts.after ?? 100, line: 320 },
+  });
+}
+
+function tableBlock(block: Extract<ContentBlock, { type: 'table' }>): Table {
+  const colCount = block.header.length;
+  const widthsPct = colCount === 2 ? [26, 74] : Array.from({ length: colCount }, () => Math.floor(100 / colCount));
+
+  const cell = (text: string, isHeader: boolean, colIdx: number): TableCell =>
+    new TableCell({
+      width: { size: widthsPct[colIdx] ?? Math.floor(100 / colCount), type: WidthType.PERCENTAGE },
+      shading: isHeader ? { type: ShadingType.CLEAR, fill: HEADER_FILL, color: 'auto' } : undefined,
+      borders: CELL_BORDERS,
+      margins: { top: 80, bottom: 80, left: 120, right: 120 },
+      children: [
+        new Paragraph({
+          children: inlineRuns(text, { bold: isHeader, size: BODY }),
+          spacing: { line: 300 },
+        }),
+      ],
+    });
+
+  const rows: TableRow[] = [];
+  rows.push(
+    new TableRow({
+      tableHeader: true,
+      children: block.header.map((h, ci) => cell(h, true, ci)),
+    }),
   );
+  block.rows.forEach((r) => {
+    const norm = r.slice(0, colCount);
+    while (norm.length < colCount) norm.push('');
+    rows.push(new TableRow({ children: norm.map((c, ci) => cell(c, false, ci)) }));
+  });
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows,
+  });
+}
+
+/** 将模块正文按块转为 docx 元素（表格/小标题/列表/段落） */
+function moduleChildren(content: string, generating?: boolean): Array<Paragraph | Table> {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: generating ? '生成中…' : '（待补充）',
+            italics: true,
+            color: '9AA0A6',
+            size: 20,
+            font: FONT,
+          }),
+        ],
+      }),
+    ];
+  }
+
+  const out: Array<Paragraph | Table> = [];
+  parseBlocks(trimmed).forEach((b) => {
+    switch (b.type) {
+      case 'table':
+        out.push(tableBlock(b));
+        out.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+        break;
+      case 'heading': {
+        const tag = b.priority === 'required' ? '  【★必选】' : b.priority === 'recommend' ? '  【★推荐】' : b.priority === 'optional' ? '  【可选】' : '';
+        out.push(
+          new Paragraph({
+            spacing: { before: 140, after: 80 },
+            children: [
+              new TextRun({ text: b.text + tag, bold: true, size: 22, color: '1F2329', font: FONT }),
+            ],
+          }),
+        );
+        break;
+      }
+      case 'bullet':
+        b.items.forEach((it) => {
+          out.push(
+            new Paragraph({
+              bullet: { level: 0 },
+              children: inlineRuns(it),
+              spacing: { after: 60, line: 320 },
+            }),
+          );
+        });
+        break;
+      case 'ordered':
+        b.items.forEach((it, idx) => {
+          out.push(
+            new Paragraph({
+              indent: { left: 360, hanging: 360 },
+              children: [
+                new TextRun({ text: `${idx + 1}. `, bold: true, size: BODY, font: FONT }),
+                ...inlineRuns(it),
+              ],
+              spacing: { after: 60, line: 320 },
+            }),
+          );
+        });
+        break;
+      case 'paragraph':
+        out.push(bodyParagraph(b.text));
+        break;
+      default:
+        break;
+    }
+  });
+  return out;
 }
 
 export async function exportBriefToDocx(brief: Brief): Promise<void> {
-  const children: Paragraph[] = [];
+  const children: Array<Paragraph | Table> = [];
 
   children.push(
     new Paragraph({
@@ -66,34 +204,29 @@ export async function exportBriefToDocx(brief: Brief): Promise<void> {
     children.push(
       new Paragraph({
         heading: HeadingLevel.HEADING_1,
-        spacing: { before: 240, after: 120 },
+        spacing: { before: 260, after: 120 },
         children: [
           new TextRun({
             text: `${String(index + 1).padStart(2, '0')}  ${module.title}`,
             bold: true,
-            size: 28,
+            size: 27,
             color: '1F4E79',
-            font: '微软雅黑',
+            font: FONT,
           }),
-          new TextRun({
-            text: `   ${module.enTitle}`,
-            size: 18,
-            color: '8F959E',
-            font: 'Arial',
-          }),
+          ...(module.enTitle
+            ? [
+                new TextRun({
+                  text: `   ${module.enTitle}`,
+                  size: 17,
+                  color: '8F959E',
+                  font: 'Arial',
+                }),
+              ]
+            : []),
         ],
       }),
     );
-    const body = module.content.trim();
-    if (body) {
-      children.push(...contentParagraphs(body));
-    } else {
-      children.push(
-        new Paragraph({
-          children: [new TextRun({ text: '（待补充）', italics: true, color: '8F959E', size: 20 })],
-        }),
-      );
-    }
+    children.push(...moduleChildren(module.content));
   });
 
   const doc = new Document({

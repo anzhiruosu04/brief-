@@ -45,11 +45,11 @@ import { uid } from '@/lib/storage';
 import { createModule } from '@/lib/defaults';
 import { toast } from 'sonner';
 import {
-  MODULE_META,
   type Brief,
   type BriefModule,
   type BriefModuleKey,
 } from '@/lib/types';
+import { getTemplate } from '@/lib/templates';
 import { cn } from '@/lib/utils';
 
 export function BriefEditor({ briefId }: { briefId: string }) {
@@ -96,6 +96,7 @@ export function BriefEditor({ briefId }: { briefId: string }) {
         material: src,
         requirement,
         model: settings.aiModel,
+        template: brief.template ?? 'koc',
         onTitle: (title) => updateBrief(brief.id, { title }),
         onModulesChange: (nextModules) => {
           updateBrief(brief.id, { modules: nextModules });
@@ -115,7 +116,7 @@ export function BriefEditor({ briefId }: { briefId: string }) {
   // 模块内容（受控本地态，编辑即时写回 store）
   const modules = brief?.modules ?? [];
   const modulePayload = useMemo(
-    () => modules.map((m) => ({ id: m.id, key: m.key, content: m.content })),
+    () => modules.map((m) => ({ id: m.id, key: m.key, kind: m.kind, content: m.content })),
     [modules],
   );
   const { byModule, result } = useModuleScan(modulePayload, activeLibrary);
@@ -196,6 +197,7 @@ export function BriefEditor({ briefId }: { briefId: string }) {
       material: material.text,
       requirement: material.requirement,
       model: settings.aiModel,
+      template: brief.template ?? 'koc',
       onTitle: (title) => updateBrief(brief.id, { title }),
       onModulesChange: (nextModules) => {
         updateBrief(brief.id, { modules: nextModules });
@@ -230,7 +232,7 @@ export function BriefEditor({ briefId }: { briefId: string }) {
   const isGenActive =
     ai.state.status === 'thinking' || ai.state.status === 'writing';
 
-  const availableMeta = MODULE_META.filter(
+  const availableMeta = getTemplate(brief.template ?? 'general').modules.filter(
     (meta) => !brief.modules.some((m) => m.key === meta.key),
   );
 

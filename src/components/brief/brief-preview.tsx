@@ -3,21 +3,8 @@
 import { ShieldCheck, ShieldAlert } from 'lucide-react';
 import type { Brief, ScanResult } from '@/lib/types';
 import { LevelBadge } from '@/components/risk-badge';
+import { BlocksView } from '@/components/brief/blocks-view';
 import { formatDate } from '@/lib/utils';
-
-/** 简易 Markdown 行内渲染：加粗、行内代码（内容多为短横线/数字编号列表，按段落+换行展示即可） */
-function PreviewBody({ text }: { text: string }) {
-  const lines = text.split('\n');
-  return (
-    <div className="space-y-1.5 text-[13.5px] leading-[1.85] text-slate-700">
-      {lines.map((line, i) => {
-        const trimmed = line.trim();
-        if (!trimmed) return <div key={i} className="h-2" />;
-        return <p key={i} className="whitespace-pre-wrap">{trimmed}</p>;
-      })}
-    </div>
-  );
-}
 
 export function BriefPreview({
   brief,
@@ -114,13 +101,7 @@ export function BriefPreview({
                   )}
                 </div>
                 <div className="mt-2.5 border-l-2 border-line pl-4">
-                  {mod.content.trim() ? (
-                    <PreviewBody text={mod.content} />
-                  ) : generating ? (
-                    <span className="text-[13px] text-placeholder">生成中…</span>
-                  ) : (
-                    <span className="text-[13px] text-placeholder">（暂无内容）</span>
-                  )}
+                  <BlocksView text={mod.content} generating={generating} />
                 </div>
               </section>
             ))}
