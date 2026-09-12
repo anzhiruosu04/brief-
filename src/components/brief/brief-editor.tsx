@@ -175,7 +175,6 @@ export function BriefEditor({ briefId }: { briefId: string }) {
     const mod = createModule(key);
     if (key === 'custom') {
       mod.title = '附加模块';
-      mod.enTitle = 'Appendix';
     }
     updateBrief(brief.id, { modules: [...brief.modules, mod] });
     setAddOpen(false);

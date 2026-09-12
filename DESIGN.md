@@ -23,7 +23,7 @@
 - 字体族：`"PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif`；数字与英文可用 `Inter`（通过 fonts.googleapis.cn 引入，含 Noto Sans SC 回退）。
 - 标题 16px/600，正文 14px/400（行高 1.7），辅助文字 12px。
 - 排版节奏：模块卡片之间 16px，卡片内 padding 20px；标签与输入控件上下 8px 节奏。
-- Brief 模块标题用"编号 + 中文名 + 英文小标签"的组合（如 `03 核心卖点 · Key Selling Points`），制造专业文档感。
+- Brief 模块标题用"编号 + 中文名"的组合（如 `03 核心卖点`），不再显示英文小标签，成品预览、编辑卡片与导出的 Word 三处保持一致。
 
 ## 动效与交互
 - 性格：轻、快、确定。过渡 150–200ms，缓动 `cubic-bezier(0.4, 0, 0.2, 1)`。

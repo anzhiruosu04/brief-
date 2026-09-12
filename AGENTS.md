@@ -69,6 +69,7 @@ src/
 
 - `Brief.template: 'general' | 'koc'`；新建默认 `koc`（20 个模块，含六要素速览/信息总表/观点库/合规红线/必带话题等），历史无该字段的 Brief 按 `general`（11 模块）渲染，两套 key 均在 `BriefModuleKey` 联合类型中。
 - 模板定义分两处：客户端 `src/lib/templates.ts`（标题/英文名/placeholder，供 UI）与服务端 `src/lib/server-templates.ts`（给模型的 guide），模块 key 必须一一对应；改模块时两处同步。
+- 模块标题展示仅渲染「编号 + 中文名」（如 `03 核心卖点`），`enTitle` 不在编辑卡片、成品预览、导出 Word 中显示；新增自定义模块时不再要求填英文名。
 - 模块 `kind: 'rich' | 'note'`：`note`（notes/complianceRedline/wordingGuide/namingRule）为合规口径类，扫描时开启 `ignoreQuoted`（引号包裹且紧跟“不得/禁止/避免”的反面引用不命中）。
 - **轻量块标记**：AI 正文用 Markdown 表格（表头 + `| --- | --- |` 分隔行）、`### 小标题`（观点标题末尾可带 `【★必选】/【★推荐】/【可选】`）、`- ` 无序、`1. ` 有序、普通段落。`parseBlocks`（blocks.ts）是唯一解析入口，预览 `BlocksView` 与 Word 导出 `docxExport` 都消费它，保证两端版式一致。编辑器仍是 textarea（placeholder 内教标记），不引入富文本编辑器。
 

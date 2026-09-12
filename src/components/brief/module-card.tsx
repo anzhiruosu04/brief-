@@ -176,11 +176,6 @@ export function ModuleCard({
             title="点击重命名模块"
           >
             <h3 className="truncate text-[13.5px] font-semibold">{mod.title}</h3>
-            {mod.enTitle && (
-              <span className="shrink-0 text-[11px] text-muted-foreground">
-                {mod.enTitle}
-              </span>
-            )}
             <Pencil
               size={11}
               className="shrink-0 text-slate-300 group-hover/title:text-slate-500"

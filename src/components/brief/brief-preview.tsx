@@ -94,11 +94,6 @@ export function BriefPreview({
                   <h2 className="text-[16px] font-semibold text-foreground">
                     {mod.title}
                   </h2>
-                  {mod.enTitle && (
-                    <span className="text-[11px] uppercase tracking-wide text-slate-400">
-                      · {mod.enTitle}
-                    </span>
-                  )}
                 </div>
                 <div className="mt-2.5 border-l-2 border-line pl-4">
                   <BlocksView text={mod.content} generating={generating} />

@@ -213,16 +213,6 @@ export async function exportBriefToDocx(brief: Brief): Promise<void> {
             color: '1F4E79',
             font: FONT,
           }),
-          ...(module.enTitle
-            ? [
-                new TextRun({
-                  text: `   ${module.enTitle}`,
-                  size: 17,
-                  color: '8F959E',
-                  font: 'Arial',
-                }),
-              ]
-            : []),
         ],
       }),
     );
