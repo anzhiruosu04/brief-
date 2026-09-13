@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileUp,
   ImageUp,
@@ -31,6 +31,7 @@ import { useAppState } from '@/hooks/useAppState';
 import { useBriefReview, type ReviewIssue } from '@/hooks/useBriefReview';
 import { importMaterial, type ImportedMaterial } from '@/lib/fileParser';
 import { exportReviewReportToDocx } from '@/lib/docxExport';
+import { loadReviewDraft, saveReviewDraft } from '@/lib/storage';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -52,6 +53,22 @@ export default function ReviewPage() {
   const draftFileRef = useRef<HTMLInputElement>(null);
   // 记录最近聚焦的输入区，决定粘贴截图填入哪一侧（两个 DropZone 均监听全局 paste，用它去重）。
   const pasteSideRef = useRef<Side>('brief');
+
+  // 打开页面时恢复上一次两侧内容（仅客户端读取，避免 hydration 不匹配）。
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    setBriefText(loadReviewDraft('brief'));
+    setDraftText(loadReviewDraft('draft'));
+    setHydrated(true);
+  }, []);
+
+  // 内容变更自动留存到本地，再次打开无需重新输入。
+  useEffect(() => {
+    if (hydrated) saveReviewDraft('brief', briefText);
+  }, [briefText, hydrated]);
+  useEffect(() => {
+    if (hydrated) saveReviewDraft('draft', draftText);
+  }, [draftText, hydrated]);
 
   const savedBriefs = useMemo(
     () => briefs.filter((b) => (b.modules ?? []).some((m) => m.content.trim())),

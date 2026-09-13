@@ -9,6 +9,8 @@ const KEYS = {
   hiddenBuiltin: 'brief-workbench:hidden-builtin:v1',
   settings: 'brief-workbench:settings:v1',
   seeded: 'brief-workbench:seeded:v1',
+  reviewBrief: 'brief-workbench:review-brief:v1',
+  reviewDraft: 'brief-workbench:review-draft:v1',
 } as const;
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -79,6 +81,19 @@ export function loadSettings(): AppSettings {
 
 export function saveSettings(settings: AppSettings): void {
   localStorage.setItem(KEYS.settings, JSON.stringify(settings));
+}
+
+// ---------- Brief 对照审核：左右文本框留存 ----------
+
+export function loadReviewDraft(kind: 'brief' | 'draft'): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem(kind === 'brief' ? KEYS.reviewBrief : KEYS.reviewDraft) ?? '';
+}
+
+export function saveReviewDraft(kind: 'brief' | 'draft', text: string): void {
+  const key = kind === 'brief' ? KEYS.reviewBrief : KEYS.reviewDraft;
+  if (!text) localStorage.removeItem(key);
+  else localStorage.setItem(key, text);
 }
 
 export { BUILTIN_WORDS, KEYS as STORAGE_KEYS };
