@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  ArrowLeft,
   Download,
   Loader2,
   Plus,
@@ -304,6 +305,20 @@ export function BriefEditor({ briefId }: { briefId: string }) {
               </div>
             </SheetContent>
           </Sheet>
+
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 gap-1.5 px-2.5"
+            title="返回工作台主页"
+          >
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">返回</span>
+              <span className="sr-only">返回工作台主页</span>
+            </Link>
+          </Button>
 
           <Input
             value={brief.title}
