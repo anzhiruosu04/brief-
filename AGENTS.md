@@ -27,10 +27,12 @@ src/
 │   ├── briefs/page.tsx             # Brief 列表（空态/入口）
 │   ├── briefs/[id]/page.tsx        # Brief 编辑器（?autogen=1 自动生成；编辑/成品预览双视图）
 │   ├── compliance/page.tsx         # 独立文案合规检测页
+│   ├── review/page.tsx             # Brief 对照审核（左 Brief 基准 / 右草稿，只核对 Brief 硬性要求）
 │   ├── library/page.tsx            # 违禁词库管理页
 │   ├── settings/page.tsx           # 设置（飞书凭证 / 模型参数 / 数据管理）
 │   └── api/
 │       ├── ai/generate-brief/      # POST SSE：流式生成结构化 Brief
+│       ├── ai/review-brief/        # POST SSE：Brief 对照审核（缺失/违规/软建议标记流）
 │       ├── ai/polish/              # POST：按命中风险词 AI 合规改写
 │       ├── ai/ocr/                 # POST：多模态图片 OCR
 │       └── feishu/read/            # POST：服务端代理飞书文档读取
@@ -46,13 +48,15 @@ src/
 ├── hooks/
 │   ├── useAppState.tsx             # 全局状态（briefs/词库/设置）+ 持久化
 │   ├── useBriefAI.ts               # SSE 流式接收 + 标题/模块标记解析
+│   ├── useBriefReview.ts           # 对照审核 SSE 接收 + OVERALL/MISSING/VIOLATION/SUGGESTION 块解析（结论以清单为准）
 │   ├── useMaterialDrop.ts          # 素材拖拽/粘贴 hook（DataTransfer.types 大小写不敏感；微信飞书截图与文档、剪贴板位图）
 │   └── useCompliance.ts            # 扫描 hooks（单文本 / 多模块；note 类模块开启反面引用豁免）
 ├── lib/
 │   ├── types.ts                    # 全部领域类型、MODULE_META、模板类型（BriefTemplateId/Kind/TemplateModuleDef）
-│   ├── templates.ts                # 客户端双模板：GENERAL_TEMPLATE(11 模块) / KOC_TEMPLATE(20 模块)，含 placeholder
+│   ├── templates.ts                # 客户端三模板：general(11) / koc(9 模块，7 必填+2 选填) / joey(8 模块，7 必填+1 选填)
 │   ├── blocks.ts                   # parseBlocks：把模块正文解析为 table/heading/ordered/bullet/paragraph
 │   ├── server-templates.ts         # 服务端生成模板规格 + buildSystemPrompt/buildUserPrompt 所需素材
+│   ├── server-review.ts            # Brief 对照审核 prompt（只核对 Brief 自身硬性要求，不叠加违禁词库）
 │   ├── scanner.ts                  # 违禁词扫描引擎（含重叠去重、长词优先、ignoreQuoted 反面引用豁免）
 │   ├── storage.ts                  # localStorage 读写 + 默认设置
 │   ├── defaults.ts                 # Brief/模块工厂（新建默认 koc 模板）
@@ -109,6 +113,7 @@ src/
 
 - `POST /api/ai/generate-brief`（SSE）：入参 `{ material, requirement?, model?, temperature?, template?: 'general'|'koc'|'joey' }`（缺省 general；首页默认 koc，选 Joey Brief 时传 joey）；帧 `event: delta` + `data:{text}` 逐 token 推送模型正文、`event: done`、`event: error {message}`。模型正文首行为 `<<<TITLE:Brief标题>>>`（由 useBriefAI 提取后回调 onTitle 写 brief.title），其后以 `<<<MODULE:key|模块名>>>` 标记模块边界，由 `useBriefAI.generate` 内部 `buildModules` 边接收边切分（处理标记跨 chunk：末尾未闭合标记先截掉），模块 id 按出现序号在流式过程中保持稳定。`generate` 返回 `{ ok, aborted, error? }`。
 - 首页「一键生成」：`QuickGenerate` 创建 Brief（写入 sourceText）→ sessionStorage 存 `autogen:<id>` 一次性指令 → 跳转 `/briefs/<id>?autogen=1`；编辑器 useEffect 读取后自动生成、完成后切到「成品预览」视图。编辑器顶栏可在「编辑 / 成品预览」(`brief-preview.tsx`) 间切换。
+- `POST /api/ai/review-brief`（SSE）：入参 `{ brief, draft, model?, temperature? }`，同样以 `event: delta` 推送正文。正文用独立成行的块标记：`<<<OVERALL>>>`（结论：通过/不通过 + 说明）、`<<<MISSING>>>`（要求/缺失/建议，可多个）、`<<<VIOLATION>>>`（要求/草稿/quote/建议，可多个，quote 为草稿原文片段用于定位）、`<<<SUGGESTION>>>`（软建议 `- ` 列表，可省略）。`useBriefReview` 边收边解析；结论与清单冲突时以清单为准（有缺失/违规即不通过）。只依据 Brief 自身硬性要求，不叠加违禁词库；不做历史留存。
 - `POST /api/ai/polish`：`{ text, items:[{word,suggestion}], model?, temperature? }` → `{ text }`。
 - `POST /api/ai/ocr`：`{ image: data:image/...;base64,xxx, model? }` → `{ text }`（多模态模型）。
 - `POST /api/feishu/read`：`{ url, appId, appSecret }`，服务端代理换取 tenant_access_token 并读取 docx/doc/wiki/sheet；未配置凭证返回 400 + `code:"FEISHU_NOT_CONFIGURED"`。凭证只存浏览器 localStorage，随请求发送，不落服务端。

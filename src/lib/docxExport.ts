@@ -340,3 +340,183 @@ export async function exportReportToDocx(params: {
   const blob = await Packer.toBlob(doc);
   saveAs(blob, `${params.title.replace(/[\\/:*?"<>|]/g, '_')}.docx`);
 }
+
+/** Brief 对照审核报告导出 */
+export async function exportReviewReportToDocx(params: {
+  briefTitle: string;
+  verdict: 'pass' | 'fail' | 'unknown';
+  summary: string;
+  missing: Array<{ requirement: string; detail: string; suggestion: string }>;
+  violations: Array<{
+    requirement: string;
+    detail: string;
+    quote?: string;
+    suggestion: string;
+  }>;
+  suggestions: string[];
+}): Promise<void> {
+  const verdictText =
+    params.verdict === 'pass'
+      ? '通过'
+      : params.verdict === 'fail'
+        ? '不通过'
+        : '待人工复核';
+  const verdictColor =
+    params.verdict === 'pass' ? '1A8754' : params.verdict === 'fail' ? 'D93026' : 'D97A00';
+
+  const children: Array<Paragraph | Table> = [
+    new Paragraph({
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.CENTER,
+      children: [
+        new TextRun({ text: 'Brief 对照审核报告', bold: true, size: 40, font: '微软雅黑' }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 120 },
+      children: [new TextRun({ text: params.briefTitle, size: 22, color: '646A73' })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 240 },
+      children: [
+        new TextRun({ text: `审核结论：${verdictText}`, bold: true, size: 26, color: verdictColor }),
+        new TextRun({
+          text: `    缺失项 ${params.missing.length} 条 ｜ 违规项 ${params.violations.length} 条`,
+          size: 20,
+          color: '646A73',
+        }),
+      ],
+    }),
+  ];
+
+  if (params.summary) {
+    children.push(
+      new Paragraph({
+        spacing: { after: 120 },
+        children: [
+          new TextRun({ text: '总体说明：', bold: true, size: 22, font: '微软雅黑' }),
+          new TextRun({ text: params.summary, size: 22 }),
+        ],
+      }),
+    );
+  }
+
+  const pushIssue = (
+    index: number,
+    label: string,
+    color: string,
+    issue: { requirement: string; detail: string; quote?: string; suggestion: string },
+  ) => {
+    children.push(
+      new Paragraph({
+        spacing: { before: 160, after: 60 },
+        children: [
+          new TextRun({ text: `${index}. ${label}`, bold: true, size: 24, color: color, font: '微软雅黑' }),
+        ],
+      }),
+      new Paragraph({
+        spacing: { after: 40 },
+        children: [
+          new TextRun({ text: 'Brief 要求：', bold: true, size: 20 }),
+          new TextRun({ text: issue.requirement || '—', size: 20 }),
+        ],
+      }),
+    );
+    if (issue.detail) {
+      children.push(
+        new Paragraph({
+          spacing: { after: 40 },
+          children: [
+            new TextRun({ text: label === '违规' ? '问题：' : '缺失：', bold: true, size: 20 }),
+            new TextRun({ text: issue.detail, size: 20 }),
+          ],
+        }),
+      );
+    }
+    if (issue.quote) {
+      children.push(
+        new Paragraph({
+          spacing: { after: 40 },
+          children: [
+            new TextRun({ text: '草稿原文：', bold: true, size: 20 }),
+            new TextRun({ text: `“${issue.quote}”`, size: 20, italics: true, color: 'D93026' }),
+          ],
+        }),
+      );
+    }
+    children.push(
+      new Paragraph({
+        spacing: { after: 80 },
+        children: [
+          new TextRun({ text: '修改建议：', bold: true, size: 20 }),
+          new TextRun({ text: issue.suggestion || '—', size: 20, color: '1A8754' }),
+        ],
+      }),
+    );
+  };
+
+  if (params.missing.length) {
+    children.push(
+      new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        spacing: { before: 200, after: 80 },
+        children: [new TextRun({ text: '一、要求有但草稿缺失', bold: true, size: 28, font: '微软雅黑' })],
+      }),
+    );
+    params.missing.forEach((it, i) => pushIssue(i + 1, '缺失', 'D97A00', it));
+  }
+
+  if (params.violations.length) {
+    children.push(
+      new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        spacing: { before: 200, after: 80 },
+        children: [new TextRun({ text: '二、禁止却在草稿出现', bold: true, size: 28, font: '微软雅黑' })],
+      }),
+    );
+    params.violations.forEach((it, i) => pushIssue(i + 1, '违规', 'D93026', it));
+  }
+
+  if (!params.missing.length && !params.violations.length) {
+    children.push(
+      new Paragraph({
+        spacing: { after: 120 },
+        children: [
+          new TextRun({
+            text: '草稿已满足 Brief 中明确写出的全部硬性要求，未发现缺失项或违规项。',
+            size: 22,
+          }),
+        ],
+      }),
+    );
+  }
+
+  if (params.suggestions.length) {
+    children.push(
+      new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        spacing: { before: 200, after: 80 },
+        children: [new TextRun({ text: '附：优化建议（非必须）', bold: true, size: 28, font: '微软雅黑' })],
+      }),
+    );
+    params.suggestions.forEach((s) => {
+      children.push(
+        new Paragraph({
+          bullet: { level: 0 },
+          spacing: { after: 40 },
+          children: [new TextRun({ text: s, size: 20 })],
+        }),
+      );
+    });
+  }
+
+  const doc = new Document({
+    creator: 'Brief 智能工作台',
+    title: 'Brief 对照审核报告',
+    sections: [{ children }],
+  });
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, `Brief对照审核报告_${params.briefTitle.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)}.docx`);
+}

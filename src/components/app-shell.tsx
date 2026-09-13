@@ -4,11 +4,19 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { ShieldCheck, LayoutDashboard, ScanText, BookOpen, Settings } from 'lucide-react';
+import {
+  ShieldCheck,
+  LayoutDashboard,
+  ScanText,
+  ListChecks,
+  BookOpen,
+  Settings,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV = [
   { href: '/briefs', label: 'Brief 工作台', icon: LayoutDashboard },
+  { href: '/review', label: 'Brief对照审核', icon: ListChecks },
   { href: '/compliance', label: '文案合规检测', icon: ScanText },
   { href: '/library', label: '违禁词库', icon: BookOpen },
   { href: '/settings', label: '设置', icon: Settings },
