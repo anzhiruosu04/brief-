@@ -28,12 +28,40 @@ import {
 } from '@/components/ui/select';
 import { DropZone } from '@/components/material/drop-zone';
 import { useAppState } from '@/hooks/useAppState';
-import { useBriefReview, type ReviewIssue } from '@/hooks/useBriefReview';
+import { useBriefReview, type ReviewIssue, type ReviewLevel, type ReviewRule } from '@/hooks/useBriefReview';
 import { importMaterial, type ImportedMaterial } from '@/lib/fileParser';
 import { exportReviewReportToDocx } from '@/lib/docxExport';
 import { loadReviewDraft, saveReviewDraft } from '@/lib/storage';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+const LEVEL_META: Record<ReviewLevel, { label: string; chip: string; dot: string }> = {
+  high: {
+    label: '高',
+    chip: 'border-red-200 bg-red-50 text-red-700',
+    dot: 'bg-red-500',
+  },
+  medium: {
+    label: '中',
+    chip: 'border-amber-200 bg-amber-50 text-amber-700',
+    dot: 'bg-amber-500',
+  },
+  low: {
+    label: '低',
+    chip: 'border-yellow-200 bg-yellow-50 text-yellow-700',
+    dot: 'bg-yellow-500',
+  },
+};
+
+function countByLevel(issues: ReviewIssue[]): { high: number; medium: number; low: number } {
+  return issues.reduce(
+    (acc, it) => {
+      acc[it.level] += 1;
+      return acc;
+    },
+    { high: 0, medium: 0, low: 0 },
+  );
+}
 
 type Side = 'brief' | 'draft';
 
@@ -188,6 +216,7 @@ export default function ReviewPage() {
                     briefTitle: briefName || '未命名 Brief',
                     verdict: r.verdict,
                     summary: r.summary,
+                    rules: r.rules,
                     missing: r.missing,
                     violations: r.violations,
                     suggestions: r.suggestions,
@@ -414,6 +443,8 @@ function ResultPanel(props: {
 
   const missCount = result.missing.length;
   const vioCount = result.violations.length;
+  const missLevel = countByLevel(result.missing);
+  const vioLevel = countByLevel(result.violations);
   const failed = missCount + vioCount > 0 || result.verdict === 'fail';
 
   return (
@@ -448,10 +479,25 @@ function ResultPanel(props: {
             </span>
             <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs text-amber-700 ring-1 ring-amber-200">
               缺失 {missCount}
+              {missCount > 0 && (
+                <span className="ml-1 text-muted-foreground">
+                  （高 {missLevel.high} / 中 {missLevel.medium} / 低 {missLevel.low}）
+                </span>
+              )}
             </span>
             <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs text-red-700 ring-1 ring-red-200">
               违规 {vioCount}
+              {vioCount > 0 && (
+                <span className="ml-1 text-muted-foreground">
+                  （高 {vioLevel.high} / 中 {vioLevel.medium} / 低 {vioLevel.low}）
+                </span>
+              )}
             </span>
+            {result.rules.length > 0 && (
+              <span className="rounded-full bg-white/60 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-slate-200">
+                识别硬性要求 {result.rules.length} 条
+              </span>
+            )}
             {result.partial && loading && (
               <span className="text-xs text-muted-foreground">（结果生成中…）</span>
             )}
@@ -464,6 +510,11 @@ function ResultPanel(props: {
         </div>
       </div>
 
+      {/* Brief 硬性要求清单（rubric） */}
+      {result.rules.length > 0 && (
+        <RulesPanel rules={result.rules} />
+      )}
+
       {/* 缺失清单 */}
       {missCount > 0 && (
         <IssueSection
@@ -472,7 +523,7 @@ function ResultPanel(props: {
           accent="amber"
         >
           {result.missing.map((it, i) => (
-            <IssueCard key={it.id} index={i + 1} issue={it} accent="amber" />
+            <IssueCard key={`${it.ruleId ?? 'm'}-${i}`} index={i + 1} issue={it} accent="amber" />
           ))}
         </IssueSection>
       )}
@@ -486,7 +537,7 @@ function ResultPanel(props: {
         >
           {result.violations.map((it, i) => (
             <IssueCard
-              key={it.id}
+              key={`${it.ruleId ?? 'v'}-${i}`}
               index={i + 1}
               issue={it}
               accent="red"
@@ -540,6 +591,56 @@ function ResultPanel(props: {
   );
 }
 
+function RulesPanel({ rules }: { rules: ReviewRule[] }) {
+  const [open, setOpen] = useState(false);
+  const mustCount = rules.filter((r) => r.kind === 'must').length;
+  const forbidCount = rules.filter((r) => r.kind === 'forbid').length;
+  return (
+    <div className="rounded-lg border border-line bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-5 py-3 text-left text-[13.5px] font-semibold"
+      >
+        <ListChecks className="h-4 w-4 text-primary" />
+        从 Brief 识别的硬性要求清单
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-normal text-slate-600">
+          必备 {mustCount} · 禁止 {forbidCount}
+        </span>
+        <ArrowRight
+          className={cn('ml-auto h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-90')}
+        />
+      </button>
+      {open && (
+        <ul className="space-y-1.5 border-t border-line px-5 py-3">
+          {rules.map((r) => {
+            const lv = LEVEL_META[r.level] ?? LEVEL_META.medium;
+            return (
+              <li key={r.id} className="flex items-start gap-2 text-[13px] leading-relaxed">
+                <span className="mt-0.5 shrink-0 rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white">
+                  {r.id}
+                </span>
+                <span
+                  className={cn(
+                    'mt-0.5 shrink-0 rounded border px-1.5 py-0.5 text-[10.5px] font-medium leading-none',
+                    r.kind === 'must'
+                      ? 'border-blue-200 bg-blue-50 text-blue-700'
+                      : 'border-red-200 bg-red-50 text-red-700',
+                  )}
+                >
+                  {r.kind === 'must' ? '必备' : '禁止'}
+                </span>
+                <span className={cn('mt-1 h-1.5 w-1.5 shrink-0 rounded-full', lv.dot)} />
+                <span className="text-slate-700">{r.text}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function IssueSection(props: {
   title: string;
   icon: React.ReactNode;
@@ -564,18 +665,28 @@ function IssueCard(props: {
   onLocate?: () => void;
 }) {
   const { issue } = props;
+  const lv = LEVEL_META[issue.level] ?? LEVEL_META.medium;
   return (
-    <div className="rounded-md border border-line bg-slate-50/50 p-4">
-      <div className="flex items-start gap-2">
-        <span
-          className={cn(
-            'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white',
-            props.accent === 'red' ? 'bg-red-500' : 'bg-amber-500',
-          )}
-        >
-          {props.index}
-        </span>
+    <div className={cn('overflow-hidden rounded-md border border-line bg-slate-50/50 pl-3')}>
+      <div className="flex items-start gap-2 py-4 pr-4">
+        <span className={cn('mt-1.5 h-full w-1 shrink-0 self-stretch rounded-full', lv.dot)} />
         <div className="min-w-0 flex-1 space-y-1.5 text-[13px] leading-relaxed">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white">
+              {issue.ruleId ?? `#${props.index}`}
+            </span>
+            <span
+              className={cn(
+                'rounded border px-1.5 py-0.5 text-[11px] font-medium',
+                lv.chip,
+              )}
+            >
+              {lv.label}风险
+            </span>
+            {props.accent === 'red' && (
+              <span className="text-[11px] font-medium text-red-600">违反禁止要求</span>
+            )}
+          </div>
           {issue.requirement && (
             <p>
               <span className="font-medium text-slate-500">Brief 要求：</span>
@@ -585,7 +696,7 @@ function IssueCard(props: {
           {issue.detail && (
             <p>
               <span className="font-medium text-slate-500">
-                {props.accent === 'red' ? '问题：' : '缺失：'}
+                {props.accent === 'red' ? '问题依据：' : '缺失依据：'}
               </span>
               <span className="text-slate-800">{issue.detail}</span>
             </p>

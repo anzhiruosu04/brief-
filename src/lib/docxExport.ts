@@ -341,18 +341,29 @@ export async function exportReportToDocx(params: {
   saveAs(blob, `${params.title.replace(/[\\/:*?"<>|]/g, '_')}.docx`);
 }
 
+type ReviewReportRule = {
+  id: string;
+  kind: 'must' | 'forbid';
+  level: 'high' | 'medium' | 'low';
+  text: string;
+};
+type ReviewReportIssue = {
+  ruleId?: string;
+  level: 'high' | 'medium' | 'low';
+  requirement: string;
+  detail: string;
+  quote?: string;
+  suggestion: string;
+};
+
 /** Brief 对照审核报告导出 */
 export async function exportReviewReportToDocx(params: {
   briefTitle: string;
   verdict: 'pass' | 'fail' | 'unknown';
   summary: string;
-  missing: Array<{ requirement: string; detail: string; suggestion: string }>;
-  violations: Array<{
-    requirement: string;
-    detail: string;
-    quote?: string;
-    suggestion: string;
-  }>;
+  rules?: ReviewReportRule[];
+  missing: ReviewReportIssue[];
+  violations: ReviewReportIssue[];
   suggestions: string[];
 }): Promise<void> {
   const verdictText =
@@ -403,17 +414,25 @@ export async function exportReviewReportToDocx(params: {
     );
   }
 
+  const levelText = { high: '高', medium: '中', low: '低' } as const;
+
   const pushIssue = (
     index: number,
     label: string,
     color: string,
-    issue: { requirement: string; detail: string; quote?: string; suggestion: string },
+    issue: ReviewReportIssue,
   ) => {
     children.push(
       new Paragraph({
         spacing: { before: 160, after: 60 },
         children: [
-          new TextRun({ text: `${index}. ${label}`, bold: true, size: 24, color: color, font: '微软雅黑' }),
+          new TextRun({
+            text: `${index}. [${issue.ruleId ?? '-'}] [${levelText[issue.level]}风险] ${label}`,
+            bold: true,
+            size: 24,
+            color: color,
+            font: '微软雅黑',
+          }),
         ],
       }),
       new Paragraph({
@@ -457,25 +476,45 @@ export async function exportReviewReportToDocx(params: {
     );
   };
 
+  let sectionIndex = 0;
+  const sectionTitle = (text: string) => {
+    sectionIndex += 1;
+    const numeral = ['一', '二', '三', '四', '五'][sectionIndex - 1] ?? String(sectionIndex);
+    return new Paragraph({
+      heading: HeadingLevel.HEADING_1,
+      spacing: { before: 200, after: 80 },
+      children: [new TextRun({ text: `${numeral}、${text}`, bold: true, size: 28, font: '微软雅黑' })],
+    });
+  };
+
+  if (params.rules && params.rules.length) {
+    children.push(sectionTitle('从 Brief 识别的硬性要求'));
+    params.rules.forEach((r) => {
+      children.push(
+        new Paragraph({
+          bullet: { level: 0 },
+          spacing: { after: 40 },
+          children: [
+            new TextRun({ text: `[${r.id}]`, bold: true, size: 20, font: 'Consolas' }),
+            new TextRun({
+              text: `[${r.kind === 'must' ? '必备' : '禁止'}/${levelText[r.level]}] `,
+              size: 20,
+              color: r.kind === 'must' ? '1F4E79' : 'D93026',
+            }),
+            new TextRun({ text: r.text, size: 20 }),
+          ],
+        }),
+      );
+    });
+  }
+
   if (params.missing.length) {
-    children.push(
-      new Paragraph({
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 200, after: 80 },
-        children: [new TextRun({ text: '一、要求有但草稿缺失', bold: true, size: 28, font: '微软雅黑' })],
-      }),
-    );
+    children.push(sectionTitle('要求有但草稿缺失'));
     params.missing.forEach((it, i) => pushIssue(i + 1, '缺失', 'D97A00', it));
   }
 
   if (params.violations.length) {
-    children.push(
-      new Paragraph({
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 200, after: 80 },
-        children: [new TextRun({ text: '二、禁止却在草稿出现', bold: true, size: 28, font: '微软雅黑' })],
-      }),
-    );
+    children.push(sectionTitle('禁止却在草稿出现'));
     params.violations.forEach((it, i) => pushIssue(i + 1, '违规', 'D93026', it));
   }
 
