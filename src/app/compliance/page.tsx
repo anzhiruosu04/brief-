@@ -10,7 +10,6 @@ import {
   Copy,
   Download,
   Check,
-  ScanText,
   Wand2,
 } from 'lucide-react';
 import { AppShell, PageHeader } from '@/components/app-shell';
@@ -227,40 +226,28 @@ export default function CompliancePage() {
             )}
           </div>
 
-          {/* 文本区 */}
+          {/* 文本区：始终可输入，进入页面即可直接粘贴（Cmd/Ctrl+V） */}
           <div className="thin-scroll min-h-0 flex-1 overflow-y-auto bg-white">
-            {text ? (
-              preview ? (
-                <div className="mx-auto max-w-3xl px-8 py-6">
-                  <HighlightedText
-                    text={text}
-                    hits={result.hits}
-                    onHitClick={replaceOne}
-                    className="text-[14px] leading-[2] text-slate-800"
-                  />
-                  <p className="mt-6 border-t border-dashed border-line pt-3 text-xs text-muted-foreground">
-                    点击高亮词可用建议表述替换该处；如需批量替换，请在右侧风险列表操作。
-                  </p>
-                </div>
-              ) : (
-                <Textarea
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="在此粘贴待检测的文案，如新闻稿、海报文案、短视频脚本、直播口播稿…输入即实时扫描，无需点击按钮。"
-                  className="min-h-full resize-none rounded-none border-0 px-8 py-6 text-[14px] leading-[2] focus-visible:ring-0"
+            {preview && text ? (
+              <div className="mx-auto max-w-3xl px-8 py-6">
+                <HighlightedText
+                  text={text}
+                  hits={result.hits}
+                  onHitClick={replaceOne}
+                  className="text-[14px] leading-[2] text-slate-800"
                 />
-              )
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-3 px-10 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/8">
-                  <ScanText size={26} className="text-primary" />
-                </div>
-                <p className="text-sm font-medium">粘贴或上传待检测文案</p>
-                <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-                  支持直接粘贴文本、上传 DOCX / PDF / TXT 文件，或上传图片通过多模态
-                  AI 识别文字。检测基于内置 564 条违禁词库与你的自定义词条，输入即时出结果。
+                <p className="mt-6 border-t border-dashed border-line pt-3 text-xs text-muted-foreground">
+                  点击高亮词可用建议表述替换该处；如需批量替换，请在右侧风险列表操作。
                 </p>
               </div>
+            ) : (
+              <Textarea
+                autoFocus
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={'在此点击后，直接粘贴（Cmd/Ctrl + V）从微信、飞书等复制的文案。\n\n也可切换上方「文件上传」「图片 OCR」，或把文件 / 截图直接拖进本区域。\n\n支持新闻稿、海报文案、短视频脚本、直播口播稿等；输入即实时扫描，无需点击按钮。'}
+                className="min-h-full resize-none rounded-none border-0 px-8 py-6 text-[14px] leading-[2] focus-visible:ring-0"
+              />
             )}
           </div>
 
