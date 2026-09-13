@@ -37,7 +37,10 @@ export function createModule(key: BriefModuleKey, content = ''): BriefModule {
 }
 
 export function createEmptyModules(template: BriefTemplateId = 'koc'): BriefModule[] {
-  return getTemplate(template).modules.map((m) => createModuleFromDef(m));
+  // 仅实例化必填模块；选填模块（optional）由 AI 生成或用户手动添加
+  return getTemplate(template)
+    .modules.filter((m) => !m.optional)
+    .map((m) => createModuleFromDef(m));
 }
 
 export function createBrief(partial?: Partial<Brief>): Brief {

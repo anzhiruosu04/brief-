@@ -78,6 +78,7 @@ export type BriefModuleKey =
   | 'priority'
   | 'projectInfo'
   | 'salesAssets'
+  | 'productInfo'
   | 'custom';
 
 /** 单个模板的模块定义 */
@@ -87,6 +88,8 @@ export interface TemplateModuleDef {
   enTitle: string;
   placeholder: string;
   kind?: BriefModuleKind;
+  /** 选填模块：素材无对应内容时不生成、不在默认结构中强制占位 */
+  optional?: boolean;
 }
 
 export interface BriefTemplate {

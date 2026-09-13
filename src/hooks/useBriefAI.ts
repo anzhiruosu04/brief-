@@ -120,12 +120,34 @@ export function useBriefAI() {
         // 标题只在首次解析到时回调一次
         let reportedTitle = false;
 
-        /** 提取首行 <<<TITLE:xxx>>>，返回 { title, text }；标记可能跨 chunk */
+        /**
+         * 提取首行标题，兼容两种写法：
+         *   <<<TITLE:xxx>>>   （标准闭合）
+         *   <<<TITLE:xxx      （模型漏写结尾 >>>，以换行结束）
+         * 仅当标题完整（出现 >>> 或换行）时才返回标题，避免流式中提前锁定半个标题。
+         */
         const extractTitle = (full: string): { title: string | null; text: string } => {
-          const m = /^<<<TITLE:([^>]*)>>>/.exec(full.trimStart());
-          if (!m) return { title: null, text: full };
-          const title = m[1].trim();
-          return { title: title || null, text: full.replace(/^\s*<<<TITLE:[^>]*>>>\s*/, '') };
+          const s = full.trimStart();
+          if (!s.startsWith('<<<TITLE:')) return { title: null, text: full };
+          const rest = s.slice('<<<TITLE:'.length);
+          const closeIdx = rest.indexOf('>>>');
+          const nlIdx = rest.indexOf('\n');
+          let title = '';
+          let consumed = 0;
+          if (closeIdx !== -1 && (nlIdx === -1 || closeIdx < nlIdx)) {
+            title = rest.slice(0, closeIdx);
+            consumed = '<<<TITLE:'.length + closeIdx + 3;
+          } else if (nlIdx !== -1) {
+            title = rest.slice(0, nlIdx).replace(/>>>\s*$/, '');
+            consumed = '<<<TITLE:'.length + nlIdx;
+          } else {
+            // 标题还在流式生成、既未闭合也未换行，暂不提取
+            return { title: null, text: full };
+          }
+          title = title.trim();
+          const lead = full.length - s.length;
+          const text = full.slice(0, lead) + s.slice(consumed).replace(/^\s*/, '');
+          return { title: title || null, text };
         };
 
         /**
