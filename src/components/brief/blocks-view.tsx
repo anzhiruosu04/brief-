@@ -34,6 +34,7 @@ function renderInline(text: string, keyBase: string): React.ReactNode[] {
 }
 
 function TableBlock({ block }: { block: Extract<ContentBlock, { type: 'table' }> }) {
+  const colCount = block.header.length;
   return (
     <div className="my-1 overflow-x-auto rounded-md border border-line">
       <table className="w-full border-collapse text-[13px]">
@@ -44,7 +45,7 @@ function TableBlock({ block }: { block: Extract<ContentBlock, { type: 'table' }>
                 key={i}
                 className={cn(
                   'border-b border-line px-3 py-2 text-left font-semibold text-foreground',
-                  i === 0 && 'w-[26%] whitespace-nowrap text-[12.5px]',
+                  colCount === 2 && i === 0 && 'w-[26%] whitespace-nowrap text-[12.5px]',
                 )}
               >
                 {h}

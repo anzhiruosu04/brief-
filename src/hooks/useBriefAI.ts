@@ -2,13 +2,14 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { BriefModule, BriefModuleKey, TemplateModuleDef } from '@/lib/types';
-import { GENERAL_TEMPLATE, KOC_TEMPLATE } from '@/lib/templates';
+import { GENERAL_TEMPLATE, KOC_TEMPLATE, JOEY_TEMPLATE } from '@/lib/templates';
 import { uid } from '@/lib/storage';
 
 /** 两套模板的全部模块定义，用于把 AI 输出的 key 映射为标题/英文名/形态 */
 const ALL_DEFS: TemplateModuleDef[] = [
   ...GENERAL_TEMPLATE.modules,
   ...KOC_TEMPLATE.modules,
+  ...JOEY_TEMPLATE.modules,
 ];
 
 function findDef(key: string): TemplateModuleDef | undefined {
@@ -43,7 +44,7 @@ interface GenerateParams {
   requirement?: string;
   existingTitle?: string;
   model: string;
-  template?: 'general' | 'koc';
+  template?: 'general' | 'koc' | 'joey';
   onTitle?: (title: string) => void;
   onModulesChange: (modules: BriefModule[]) => void;
 }

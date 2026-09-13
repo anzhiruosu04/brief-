@@ -27,7 +27,7 @@ export interface ForbiddenWord {
 export type WordTuple = [string, string, RiskLevel, string, string, 0 | 1];
 
 /** Brief 模板 ID：general=通用 11 模块；koc=KOC 种草传播 Brief（参考车企实际版式） */
-export type BriefTemplateId = 'general' | 'koc';
+export type BriefTemplateId = 'general' | 'koc' | 'joey';
 
 /** 模块渲染形态：默认富文本块（支持表格/小标题/列表）；note=合规备注（扫描豁免反面引用） */
 export type BriefModuleKind = 'rich' | 'note';

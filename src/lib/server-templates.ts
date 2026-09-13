@@ -3,7 +3,7 @@
  * 只放「给模型看的指令」，避免 route.ts 直接依赖带 uid 等 client 工具的模块。
  */
 
-export type GenTemplateId = 'general' | 'koc';
+export type GenTemplateId = 'general' | 'koc' | 'joey';
 
 export interface GenModuleSpec {
   key: string;
@@ -124,12 +124,77 @@ const KOC_MODULES: GenModuleSpec[] = [
   },
 ];
 
+const JOEY_MODULES: GenModuleSpec[] = [
+  {
+    key: 'sixElements',
+    title: '六要素速览',
+    guide:
+      '从素材中原话摘录，输出两列表格，表头「要素 | 内容」，固定 6 行：做什么 / 什么时候 / 在哪里 / 怎么做 / 重点 / 红线。' +
+      '右栏只填素材原文信息；某行素材未提及，右栏照填「素材未提供」。导购向素材中「重点」常含必选/推荐/可选观点，「红线」常含不点名竞品·不拉踩·无绝对化用语等，按原文填。',
+  },
+  {
+    key: 'infoSheet',
+    title: '信息总表',
+    guide:
+      '从素材中原话摘录，输出两列表格，表头「项目 | 内容」，按素材已有信息列行：传播车型（可含车型定性括注）、传播动作（如坐播口播脚本·60s 导购向）、传播定位、传播渠道（可含参考达人）、传播节点、核心标签词。' +
+      '同一单元格多个标签用「 · 」分隔；素材没有的项目不硬造行，固定项目缺值填「素材未提供」。',
+  },
+  {
+    key: 'commRules',
+    title: '传播规范',
+    guide:
+      '从素材中原话摘录对内容生产与导购口径的规范，输出两列表格，表头「规范要点 | 要求」，每行一个要点（如价格诚意优先 / 导购为主体 / 级别差异不点名 / 引导线下 / 画面与封面），右栏放素材中的具体要求原文。' +
+      '不补充素材没有的规范条目；完全没有则填「素材未提供」。',
+  },
+  {
+    key: 'objective',
+    title: '传播目标',
+    guide:
+      '只把素材中明确写出的传播目标原话放入，必须用三个固定「### 」小标题分节：「### 产品力维度」「### 市场声量维度」「### 用户心智维度」。' +
+      '素材在某维度没有内容时，该小标题下写「素材未提供」；素材换用了维度名仍归一到这三节，不新增第四节。',
+  },
+  {
+    key: 'audience',
+    title: '目标受众',
+    guide: '只把素材中写明的目标受众原话摘录，用「1. 2. 3.」有序列表逐条列出，不新增画像、不扩写洞察；素材未写填「素材未提供」。',
+  },
+  {
+    key: 'assets',
+    title: '官方固定资产与五大旗舰标准定性',
+    guide:
+      '从素材中原话摘录官方定性与资产：① 先用普通段落写明需高频绑定的品牌主张，并保留车名书写注意（如不可简写）；' +
+      '② 用「### 五大旗舰级新标准」小标题 +「- 」列表列出标准（如豪华质感 / 三电系统 —— … / 驾控性能 —— … / 双智 —— … / 安全），原话保留参数与限定词；' +
+      '③ 用「### 版型与价格（官方口径）」小标题 + 五列 Markdown 表格原样罗列全部版型，表头固定「版型 | 价格 | 续航 | 动力 | 关键差异」，一行一个版型，价格/续航/动力/差异均以素材为准，素材缺项填「素材未提供」，绝不推算或编造配置与价格。',
+  },
+  {
+    key: 'viewpoints',
+    title: '传播核心观点库与标题示例',
+    optional: true,
+    guide:
+      '【选填】仅当素材明确包含观点时才输出本模块。观点数量、视角、结论、优先级与示例标题全部以素材为准，原话摘录，不自行归纳或新增。' +
+      '每个观点单独一行小标题，格式「### 观点N【XX视角】+ 素材中的核心结论（空格）【★必选】」，结尾标签三选一【★必选】/【★推荐】/【可选】且与素材标注一致、只出现一次；' +
+      '小标题下先写「核心论点：」段落（原话摘录），再换行写「示例标题：」并用「- 《标题》」无序列表原样罗列该观点给出的标题。素材没有观点/标题时不要输出本模块。',
+  },
+  {
+    key: 'notes',
+    title: '注意事项',
+    kind: 'note',
+    guide:
+      '从素材中原话摘录合规与口径注意事项，用固定「### 」小标题组织，按素材实际有的内容填：「### 合规要求」（- 列表，如不点名竞品·统一泛指、不拉踩、无绝对化用语、辅助驾驶≠自动驾驶、数据与官方一致）、' +
+      '「### 数据口径」（价格/配置/销量等以官方为准、特定数据仅在官方发布时使用）、「### 车型名称书写规范」（品牌/产品/完整名称/不可简写）、' +
+      '「### 竞品对比（内部素材，脚本不点名）」（四列表格，表头「维度 | 本品 | 同级常见做法 | 脚本话术方向」，并在表后保留“脚本中不出现竞品名称、一律泛指”的说明）、' +
+      '「### 传播信息」（两列表格：传播车型/主推版型/起售价/传播周期/传播渠道/内容形式）、「### 热销资产」（两列表格原样罗列热销与资产）。' +
+      '素材没有的子项在该小标题下填「素材未提供」，不编造任何数据或竞品信息。',
+  },
+];
+
 export const GEN_TEMPLATES: Record<
   GenTemplateId,
-  { modules: GenModuleSpec[]; format: string; faithful?: boolean }
+  { modules: GenModuleSpec[]; format: string; faithful?: boolean; titleSuffix?: string }
 > = {
   general: { modules: GENERAL_MODULES, format: '模块正文用 Markdown：清单用无序列表，长段落不超过 3 句。' },
-  koc: { modules: KOC_MODULES, format: BLOCK_FORMAT, faithful: true },
+  koc: { modules: KOC_MODULES, format: BLOCK_FORMAT, faithful: true, titleSuffix: '传播 Brief' },
+  joey: { modules: JOEY_MODULES, format: BLOCK_FORMAT, faithful: true, titleSuffix: '坐播传播 Brief' },
 };
 
 export function buildSystemPrompt(template: GenTemplateId): string {
@@ -139,10 +204,11 @@ export function buildSystemPrompt(template: GenTemplateId): string {
   const keyRule = spec.faithful
     ? `必填模块（必须依次全部输出，即使无内容也要输出模块行并在正文写「素材未提供」）：${requiredKeys.join('、')}。\n` +
       `选填模块（仅当素材确有对应内容时才输出模块行与正文，否则整块省略，禁止为其编造或凑内容）：${optionalKeys.join('、')}。\n` +
-      `除上述模块外，不要输出任何其他模块（如合规红线、必带话题、剪辑/画面独立章节等均不要新增——剪辑、画面、口径已并入「传播规范」）。`
+      `除上述模块（含其下的「### 」固定小标题与表格）外，不要新增任何其他模块或独立章节。`
     : `必须且只能依次输出这些 key：${requiredKeys.join('、')}。每个 key 都要输出模块行；某模块素材不足时，正文给出合规占位（如【待官方确认】/待补充）而不是省略该模块。`;
+  const titleSuffix = spec.titleSuffix ?? '传播 Brief';
   const titleRule = spec.faithful
-    ? '在所有模块行之前，先单独输出一行标题标记：<<<TITLE:直接取素材中的车型/项目名称（原话），后接“ 传播 Brief”；素材无明确名称时用「未命名 传播 Brief」，不要自行创作标题、不要书名号>>>，且整篇只出现一次。'
+    ? `在所有模块行之前，先单独输出一行标题标记：<<<TITLE:直接取素材中的车型/项目名称（原话），后接“ ${titleSuffix}”；素材无明确名称时用「未命名 ${titleSuffix}」，不要自行创作标题、不要书名号>>>，且整篇只出现一次。`
     : '在所有模块行之前，先单独输出一行标题标记：<<<TITLE:根据车型/项目拟定的 Brief 标题（10-24 字，不要书名号）>>>，且整篇只出现一次。';
   const faithfulBlock = spec.faithful ? `${FIDELITY}\n` : '';
   const complianceBlock = spec.faithful

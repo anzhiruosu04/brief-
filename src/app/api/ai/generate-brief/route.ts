@@ -15,17 +15,19 @@ function buildUserPrompt(params: {
   requirement?: string;
   template: GenTemplateId;
 }): string {
-  const isKoc = params.template === 'koc';
+  const faithful = params.template === 'koc' || params.template === 'joey';
+  const tplName = params.template === 'joey' ? 'Joey Brief（60s 坐播口播·导购向）' : 'KOC 种草传播 Brief';
   return [
-    isKoc
-      ? '请把以下原始素材按指定模块「如实摘录」成一份汽车传播 Brief：只把素材中已有的信息原话填入对应模块，不补充、不拓展、不润色、不改写；必填模块素材没有就写「素材未提供」，选填模块素材没有则整块省略。'
+    faithful
+      ? `请把以下原始素材按指定模块「如实摘录」成一份${params.template === 'joey' ? 'Joey 坐播导购' : '汽车'}传播 Brief：只把素材中已有的信息原话填入对应模块，不补充、不拓展、不润色、不改写；必填模块素材没有就写「素材未提供」，选填模块素材没有则整块省略。`
       : `请根据以下素材生成一份结构化的汽车传播 Brief（模板：通用传播 Brief）。`,
+    params.template === 'joey' ? `本次模板：${tplName}，须保留版型价格表、三维度目标与注意事项等版式。` : '',
     params.requirement ? `用户补充要求：${params.requirement}` : '',
     '',
     '【原始素材】',
     params.material.slice(0, 60000),
     '',
-    isKoc
+    faithful
       ? '【必填模块行（必须依次全部输出）；# 开头为选填，仅当素材确有对应内容时才输出】'
       : '【需要输出的模块（必须依次输出全部模块行）】',
     buildModuleLines(params.template),
@@ -53,7 +55,8 @@ export async function POST(request: NextRequest) {
       template?: GenTemplateId;
     };
 
-    const template: GenTemplateId = body.template === 'koc' ? 'koc' : 'general';
+    const template: GenTemplateId =
+      body.template === 'koc' || body.template === 'joey' ? body.template : 'general';
 
     const material = (body.material ?? body.sourceText ?? '').trim();
     if (!material) {

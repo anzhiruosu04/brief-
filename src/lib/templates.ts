@@ -118,9 +118,102 @@ export const KOC_TEMPLATE: BriefTemplate = {
   modules: KOC_MODULES,
 };
 
+/**
+ * Joey Brief 模板（60s 坐播口播 · 导购向，对齐《吉利银河TT 坐播传播 Brief》版式）
+ *
+ * 与 KOC 同样坚持「如实摘录、原话粘贴、不补充不润色不脑补」。
+ *
+ * 必填 7 项：六要素速览 / 信息总表 / 传播规范 / 传播目标（产品力·市场声量·用户心智三维度）/
+ *           目标受众 / 官方固定资产与五大旗舰标准定性（含「版型与价格」多列表格）/ 注意事项
+ * 选填 1 项：传播核心观点库与标题示例（仅当素材确有观点/标题时生成）
+ */
+export const JOEY_MODULES: TemplateModuleDef[] = [
+  {
+    key: 'sixElements',
+    title: '六要素速览',
+    enTitle: 'Overview',
+    placeholder:
+      '仅如实摘录素材，原话粘贴。两列表格，固定要素行：做什么 / 什么时候 / 在哪里 / 怎么做 / 重点 / 红线。\n' +
+      '| 要素 | 内容 |\n| --- | --- |\n| 做什么 | … |\n| 什么时候 | … |\n| 在哪里 | … |\n| 怎么做 | … |\n| 重点 | … |\n| 红线 | … |\n' +
+      '素材未提及的行填「素材未提供」。',
+  },
+  {
+    key: 'infoSheet',
+    title: '信息总表',
+    enTitle: 'Fact Sheet',
+    placeholder:
+      '仅如实摘录素材，原话粘贴。两列表格：传播车型 / 传播动作（如坐播口播脚本·60s 导购向）/ 传播定位 / 传播渠道（可含参考达人）/ 传播节点 / 核心标签词。\n' +
+      '| 项目 | 内容 |\n| --- | --- |\n素材未提及的行填「素材未提供」。',
+  },
+  {
+    key: 'commRules',
+    title: '传播规范',
+    enTitle: 'Communication Rules',
+    placeholder:
+      '仅如实摘录素材中对内容/导购/画面/口径的规范要求，原话粘贴。用两列表格：左列为规范要点名（如价格诚意优先 / 导购为主体 / 级别差异不点名 / 引导线下 / 画面与封面），右列为具体要求。\n' +
+      '| 规范要点 | 要求 |\n| --- | --- |\n素材未提供填「素材未提供」。',
+  },
+  {
+    key: 'objective',
+    title: '传播目标',
+    enTitle: 'Objective',
+    placeholder:
+      '仅如实摘录素材，用三个固定维度小标题分节，原话粘贴，缺失维度填「素材未提供」：\n' +
+      '### 产品力维度\n### 市场声量维度\n### 用户心智维度\n',
+  },
+  {
+    key: 'audience',
+    title: '目标受众',
+    enTitle: 'Target Audience',
+    placeholder: '仅如实摘录素材中写明的目标人群，原话粘贴、用 `1. 2. 3.` 编号列出；素材未提供填「素材未提供」。',
+  },
+  {
+    key: 'assets',
+    title: '官方固定资产与五大旗舰标准定性',
+    enTitle: 'Official Assets',
+    placeholder:
+      '仅如实摘录素材。先用段落写明需高频绑定的品牌主张与车名书写注意；再用小标题与列表呈现「五大旗舰级新标准」；' +
+      '版型与价格必须用多列表格（列：版型 / 价格 / 续航 / 动力 / 关键差异），原样罗列：\n' +
+      '### 五大旗舰级新标准\n- 豪华质感\n- 三电系统 —— …\n\n### 版型与价格（官方口径）\n' +
+      '| 版型 | 限时先享价 | 续航 | 动力 | 关键差异 |\n| --- | --- | --- | --- | --- |\n' +
+      '| 640 后驱尊享版 | 12.99万 | 640km | 后驱333马力 | … |\n' +
+      '素材未提供的部分填「素材未提供」，不编造配置与价格。',
+  },
+  {
+    key: 'viewpoints',
+    title: '传播核心观点库与标题示例',
+    enTitle: 'Viewpoints & Titles',
+    optional: true,
+    placeholder:
+      '【选填】仅当素材给出观点时才填，原话摘录。每个观点用 `### 观点N【视角】核心结论 【★必选】`' +
+      '（标签三选一：【★必选】/【★推荐】/【可选】）作小标题，其下写「核心论点：…」段落与「示例标题：」后的 `- 《标题》` 列表。素材没有观点则整块省略。',
+  },
+  {
+    key: 'notes',
+    title: '注意事项',
+    enTitle: 'Notes',
+    kind: 'note',
+    placeholder:
+      '仅如实摘录素材中的合规与口径注意事项，原话粘贴，用小标题 + 列表/表格：\n' +
+      '### 合规要求\n- 不点名竞品、不拉踩、无绝对化用语、辅助驾驶≠自动驾驶 等\n' +
+      '### 数据口径\n### 车型名称书写规范\n' +
+      '### 竞品对比（内部素材，脚本不点名）\n可用 4 列表格：| 维度 | 本品 | 同级常见做法 | 脚本话术方向 |\n' +
+      '### 传播信息\n### 热销资产\n素材未提供的子项填「素材未提供」。',
+  },
+];
+
+export const JOEY_TEMPLATE: BriefTemplate = {
+  id: 'joey',
+  name: 'Joey Brief（坐播导购）',
+  description: '60s 坐播口播·导购向：六要素速览、信息总表、传播规范、三维度目标、受众、官方固定资产与版型价格表、观点库选填、注意事项。',
+  docTitle: '{project} 坐播传播 Brief',
+  modules: JOEY_MODULES,
+};
+
 export const TEMPLATES: Record<BriefTemplateId, BriefTemplate> = {
   general: GENERAL_TEMPLATE,
   koc: KOC_TEMPLATE,
+  joey: JOEY_TEMPLATE,
 };
 
 export const DEFAULT_TEMPLATE: BriefTemplateId = 'koc';

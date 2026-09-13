@@ -18,10 +18,17 @@ import { useAppState } from '@/hooks/useAppState';
 import { importMaterial } from '@/lib/fileParser';
 import type { ImportedMaterial } from '@/lib/fileParser';
 import { cn } from '@/lib/utils';
+import { KOC_TEMPLATE, JOEY_TEMPLATE } from '@/lib/templates';
+import type { BriefTemplateId } from '@/lib/types';
 
 type AttachedMaterial = ImportedMaterial;
 
 const ACCEPT = '.txt,.md,.csv,.docx,.pdf,image/*';
+
+const FORMAT_OPTIONS: { id: BriefTemplateId; name: string; desc: string }[] = [
+  { id: 'koc', name: '默认格式', desc: KOC_TEMPLATE.description },
+  { id: 'joey', name: 'Joey Brief', desc: JOEY_TEMPLATE.description },
+];
 
 export function QuickGenerate() {
   const router = useRouter();
@@ -29,6 +36,7 @@ export function QuickGenerate() {
   const [material, setMaterial] = useState('');
   const [requirement, setRequirement] = useState('');
   const [attached, setAttached] = useState<AttachedMaterial | null>(null);
+  const [format, setFormat] = useState<BriefTemplateId>('koc');
   const [parseError, setParseError] = useState('');
   const [parsing, setParsing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,6 +71,7 @@ export function QuickGenerate() {
     const brief = createNewBrief({
       sourceText: text,
       sourceName: attached ? attached.name : '首页一键生成',
+      template: format,
     });
     // 通过 sessionStorage 传递一次性自动生成指令，避免污染 URL 与刷新重跑
     try {
@@ -137,6 +146,46 @@ export function QuickGenerate() {
               className="min-h-[168px] resize-y text-[13.5px] leading-relaxed"
             />
           )}
+
+          <div>
+            <div className="mb-1.5 text-[12px] font-medium text-muted-foreground">输出格式</div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {FORMAT_OPTIONS.map((opt) => {
+                const active = format === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setFormat(opt.id)}
+                    aria-pressed={active}
+                    className={cn(
+                      'rounded-lg border p-2.5 text-left transition-colors',
+                      active
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+                        : 'border-line bg-white hover:border-primary/40 hover:bg-slate-50',
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          'flex h-3.5 w-3.5 items-center justify-center rounded-full border',
+                          active ? 'border-primary' : 'border-[#C9CDD4]',
+                        )}
+                      >
+                        {active && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                      </span>
+                      <span className={cn('text-[13px] font-medium', active ? 'text-primary' : 'text-foreground')}>
+                        {opt.name}
+                      </span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 pl-5 text-[11px] leading-snug text-muted-foreground">
+                      {opt.desc}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <input
